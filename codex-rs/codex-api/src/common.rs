@@ -1,3 +1,6 @@
+use crate::chat_translate::ChatMessage;
+use crate::chat_translate::ChatReasoningEffort;
+use crate::chat_translate::ChatTool;
 use crate::error::ApiError;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use codex_protocol::config_types::Verbosity as VerbosityConfig;
@@ -227,6 +230,49 @@ pub struct ResponsesApiRequest {
     pub text: Option<TextControls>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_metadata: Option<HashMap<String, String>>,
+}
+
+/// Request body for the OpenAI-compatible Chat Completions API
+/// (`POST {base_url}/chat/completions`).
+///
+/// This is the wire payload used by third-party providers configured with
+/// `wire_api = "chat"`. It is assembled from the same Responses-shaped session
+/// state via the translation layer in [`crate::chat_translate`]. Responses-only
+/// fields (`store`, `include`, `previous_response_id`, server-side reasoning)
+/// are intentionally absent — they have no Chat Completions equivalent.
+#[derive(Debug, Serialize, Clone, PartialEq)]
+pub struct ChatCompletionsApiRequest {
+    pub model: String,
+    pub messages: Vec<ChatMessage>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tools: Vec<ChatTool>,
+    /// `"auto"` by default; can be `"none"` to disable tool use for a turn.
+    pub tool_choice: String,
+    pub stream: bool,
+    /// Requested alongside `stream: true` so the final chunk carries token
+    /// usage. Many providers only return usage when this is set.
+    pub stream_options: StreamOptions,
+    /// Optional reasoning-effort hint understood by OpenAI o-series and
+    /// DeepSeek-R1 style models. Omitted from the body when `None`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<ChatReasoningEffort>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+}
+
+/// `stream_options` object controlling usage reporting during streaming.
+#[derive(Debug, Default, Serialize, Clone, PartialEq)]
+pub struct StreamOptions {
+    /// Include token usage in the terminal streamed chunk.
+    pub include_usage: bool,
 }
 
 impl From<&ResponsesApiRequest> for ResponseCreateWsRequest {

@@ -254,7 +254,8 @@ impl CodexAuth {
                 ));
             };
             let base_url = chatgpt_base_url
-                .unwrap_or(ChatGptEnvironment::default().chatgpt_base_url())
+                .or(ChatGptEnvironment::default().chatgpt_base_url())
+                .unwrap_or_default()
                 .trim_end_matches('/')
                 .to_string();
             let agent_identity_authapi_base_url =
@@ -369,7 +370,8 @@ impl CodexAuth {
         auth_route_config: Option<&AuthRouteConfig>,
     ) -> std::io::Result<Self> {
         let base_url = chatgpt_base_url
-            .unwrap_or(ChatGptEnvironment::default().chatgpt_base_url())
+            .or(ChatGptEnvironment::default().chatgpt_base_url())
+            .unwrap_or("")
             .trim_end_matches('/')
             .to_string();
         Ok(Self::AgentIdentity(
@@ -896,7 +898,8 @@ pub async fn login_with_access_token(
         }
         CodexAccessToken::AgentIdentityJwt(jwt) => {
             let base_url = chatgpt_base_url
-                .unwrap_or(ChatGptEnvironment::default().chatgpt_base_url())
+                .or(ChatGptEnvironment::default().chatgpt_base_url())
+                .unwrap_or_default()
                 .trim_end_matches('/')
                 .to_string();
             verified_record_from_jwt(jwt, &base_url, auth_route_config).await?;

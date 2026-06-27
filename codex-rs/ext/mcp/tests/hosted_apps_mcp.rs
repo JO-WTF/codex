@@ -30,7 +30,7 @@ async fn contributes_hosted_plugin_runtime_without_an_executor() -> TestResult {
     let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
     let manager = installed_manager(&config);
 
-    let servers = manager.effective_servers(&config, Some(&auth)).await;
+    let servers = manager.effective_servers(&config, true, Some(&auth)).await;
     let server = servers
         .get(CODEX_APPS_MCP_SERVER_NAME)
         .and_then(|server| server.configured_config())
@@ -62,7 +62,7 @@ async fn runtime_overlay_preserves_disabled_server() -> TestResult {
     let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
     let manager = installed_manager(&config);
 
-    let servers = manager.effective_servers(&config, Some(&auth)).await;
+    let servers = manager.effective_servers(&config, true, Some(&auth)).await;
     let server = servers
         .get(CODEX_APPS_MCP_SERVER_NAME)
         .ok_or("hosted plugin runtime should remain configured")?;
@@ -91,7 +91,7 @@ async fn legacy_fallback_overwrites_reserved_config_without_an_extension() -> Te
         config.codex_home.to_path_buf(),
     )));
 
-    let servers = manager.effective_servers(&config, Some(&auth)).await;
+    let servers = manager.effective_servers(&config, true, Some(&auth)).await;
     let server = servers
         .get(CODEX_APPS_MCP_SERVER_NAME)
         .and_then(|server| server.configured_config())
@@ -122,7 +122,7 @@ async fn later_extension_can_remove_same_name_registration() -> TestResult {
         Arc::new(builder.build()),
     );
 
-    let servers = manager.effective_servers(&config, Some(&auth)).await;
+    let servers = manager.effective_servers(&config, true, Some(&auth)).await;
 
     assert!(!servers.contains_key(CODEX_APPS_MCP_SERVER_NAME));
     Ok(())
@@ -140,7 +140,7 @@ async fn hosted_apps_mcp_requires_chatgpt_auth() -> TestResult {
     let auth = CodexAuth::from_api_key("test");
     let manager = installed_manager(&config);
 
-    let servers = manager.effective_servers(&config, Some(&auth)).await;
+    let servers = manager.effective_servers(&config, true, Some(&auth)).await;
     assert!(!servers.contains_key(CODEX_APPS_MCP_SERVER_NAME));
 
     Ok(())

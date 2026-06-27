@@ -663,7 +663,7 @@ impl Session {
             let mcp_config = mcp_manager_for_mcp
                 .runtime_config_for_thread(&config_for_mcp, mcp_thread_init_for_startup)
                 .await;
-            let mcp_servers = codex_mcp::effective_mcp_servers(&mcp_config, auth.as_ref());
+            let mcp_servers = codex_mcp::effective_mcp_servers(&mcp_config, config_for_mcp.model_provider.is_openai(), auth.as_ref());
             let tool_plugin_provenance = codex_mcp::tool_plugin_provenance(&mcp_config);
             let auth_statuses = compute_auth_statuses(
                 mcp_servers.iter(),

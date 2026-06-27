@@ -47,6 +47,7 @@ pub enum ChatGptEnvironment {
     #[default]
     Production,
     Staging,
+    Unknown,
 }
 
 impl ChatGptEnvironment {
@@ -64,23 +65,23 @@ impl ChatGptEnvironment {
             | "https://chatgpt-staging.com/backend-api"
             | "https://chatgpt-staging.com/codex"
             | "https://chatgpt-staging.com/backend-api/codex" => Ok(Self::Staging),
-            _ => anyhow::bail!(
-                "Agent Identity only supports production and staging ChatGPT environments"
-            ),
+            _ => Ok(Self::Unknown),
         }
     }
 
-    pub fn chatgpt_base_url(self) -> &'static str {
+    pub fn chatgpt_base_url(self) -> Option<&'static str> {
         match self {
-            Self::Production => "https://chatgpt.com/backend-api",
-            Self::Staging => "https://chatgpt-staging.com/backend-api",
+            Self::Production => Some("https://chatgpt.com/backend-api"),
+            Self::Staging => Some("https://chatgpt-staging.com/backend-api"),
+            Self::Unknown => None,
         }
     }
 
-    pub fn agent_identity_authapi_base_url(self) -> &'static str {
+    pub fn agent_identity_authapi_base_url(self) -> Option<&'static str> {
         match self {
-            Self::Production => PROD_AGENT_IDENTITY_AUTHAPI_BASE_URL,
-            Self::Staging => STAGING_AGENT_IDENTITY_AUTHAPI_BASE_URL,
+            Self::Production => Some(PROD_AGENT_IDENTITY_AUTHAPI_BASE_URL),
+            Self::Staging => Some(STAGING_AGENT_IDENTITY_AUTHAPI_BASE_URL),
+            Self::Unknown => None,
         }
     }
 }
@@ -895,7 +896,10 @@ J1bwkqKZTB5dHolX9A58e/xXnfZ5P8f3Z83+Izap3FwqQulk7b1WO1MQcHuVg2NN
 
     #[test]
     fn chatgpt_environment_rejects_custom_urls() {
-        assert!(ChatGptEnvironment::from_chatgpt_base_url("http://localhost:8080").is_err(),);
+        assert_eq!(
+            ChatGptEnvironment::from_chatgpt_base_url("http://localhost:8080").unwrap(),
+            ChatGptEnvironment::Unknown
+        );
     }
 
     #[test]

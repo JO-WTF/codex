@@ -14,15 +14,27 @@ use codex_app_server_client::AppServerEvent;
 use codex_app_server_protocol::AuthMode;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ServerRequest;
+use codex_mcp;
 
 impl App {
     pub(super) fn refresh_mcp_startup_expected_servers_from_config(&mut self) {
+        let is_openai_provider = self.config.model_provider_id == "openai";
         let enabled_config_mcp_servers: Vec<String> = self
             .config
             .mcp_servers
             .get()
             .iter()
-            .filter_map(|(name, server)| server.enabled.then_some(name.clone()))
+            .filter_map(|(name, server)| {
+                if server.enabled {
+                    if !is_openai_provider && name == codex_mcp::CODEX_APPS_MCP_SERVER_NAME {
+                        None
+                    } else {
+                        Some(name.clone())
+                    }
+                } else {
+                    None
+                }
+            })
             .collect();
         self.chat_widget
             .set_mcp_startup_expected_servers(enabled_config_mcp_servers);

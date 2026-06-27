@@ -241,8 +241,12 @@ pub fn configured_mcp_servers(config: &McpConfig) -> HashMap<String, McpServerCo
 
 pub fn effective_mcp_servers(
     config: &McpConfig,
+    is_openai_provider: bool,
     auth: Option<&CodexAuth>,
 ) -> HashMap<String, EffectiveMcpServer> {
+    if !is_openai_provider {
+        return HashMap::new();
+    }
     effective_mcp_servers_from_configured(configured_mcp_servers(config), config, auth)
 }
 
@@ -276,7 +280,7 @@ pub async fn read_mcp_resource(
     server: &str,
     uri: &str,
 ) -> anyhow::Result<ReadResourceResult> {
-    let mut mcp_servers = effective_mcp_servers(config, auth);
+    let mut mcp_servers = effective_mcp_servers(config, true, auth);
     mcp_servers.retain(|name, _| name == server);
     let auth_statuses = compute_auth_statuses(
         mcp_servers.iter(),
@@ -334,7 +338,7 @@ pub async fn collect_mcp_server_status_snapshot_with_detail(
     runtime_context: McpRuntimeContext,
     detail: McpSnapshotDetail,
 ) -> McpServerStatusSnapshot {
-    let mcp_servers = effective_mcp_servers(config, auth);
+    let mcp_servers = effective_mcp_servers(config, true, auth);
     let tool_plugin_provenance = tool_plugin_provenance(config);
     if mcp_servers.is_empty() {
         return McpServerStatusSnapshot {

@@ -276,6 +276,10 @@ impl ChatWidget {
                 self.open_personality_popup();
                 self.defer_input_until_settings_applied();
             }
+            SlashCommand::Provider => {
+                self.open_provider_popup();
+                self.defer_input_until_settings_applied();
+            }
             SlashCommand::Plan => {
                 self.apply_plan_slash_command();
             }
@@ -1094,7 +1098,8 @@ impl ChatWidget {
             | SlashCommand::Title
             | SlashCommand::Statusline
             | SlashCommand::Theme
-            | SlashCommand::Pets => QueueDrain::Stop,
+            | SlashCommand::Pets
+            | SlashCommand::Provider => QueueDrain::Stop,
         }
     }
 

@@ -3399,6 +3399,15 @@ impl Config {
             .unwrap_or_else(|| "openai".to_string());
         let model_provider = model_providers
             .get(&model_provider_id)
+            .or_else(|| {
+                // If the configured model provider is not found (e.g. it was deleted
+                // from model_providers but model_provider still points to it), fall
+                // back to the default OpenAI provider.
+                tracing::warn!(
+                    "Model provider `{model_provider_id}` not found, falling back to `openai`"
+                );
+                model_providers.get("openai")
+            })
             .ok_or_else(|| {
                 let message = if model_provider_id == LEGACY_OLLAMA_CHAT_PROVIDER_ID {
                     OLLAMA_CHAT_PROVIDER_REMOVED_ERROR.to_string()

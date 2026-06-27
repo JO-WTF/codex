@@ -205,30 +205,6 @@ impl From<VerbosityConfig> for OpenAiVerbosity {
     }
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq)]
-pub struct ResponsesApiRequest {
-    pub model: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub instructions: String,
-    pub input: Vec<ResponseItem>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<serde_json::Value>>,
-    pub tool_choice: String,
-    pub parallel_tool_calls: bool,
-    pub reasoning: Option<Reasoning>,
-    pub store: bool,
-    pub stream: bool,
-    pub include: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt_cache_key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub text: Option<TextControls>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub client_metadata: Option<HashMap<String, String>>,
-}
-
 impl From<&ResponsesApiRequest> for ResponseCreateWsRequest {
     fn from(request: &ResponsesApiRequest) -> Self {
         Self {
@@ -328,6 +304,86 @@ pub fn create_text_param_for_request(
             name: "codex_output_schema".to_string(),
         }),
     })
+}
+
+/// Request payload for the Responses API.
+///
+/// This is the standard OpenAI Responses API request payload, used by the Responses and ResponsesLite
+/// wire protocols.
+#[derive(Debug, Clone, Serialize)]
+pub struct ResponsesApiRequest {
+    pub model: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub instructions: String,
+    pub input: Vec<ResponseItem>,
+    pub tools: Option<Vec<Value>>,
+    pub tool_choice: String,
+    pub parallel_tool_calls: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<Reasoning>,
+    pub store: bool,
+    pub stream: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub include: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<TextControls>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_metadata: Option<HashMap<String, String>>,
+}
+
+/// Request payload for the Chat Completions API.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChatCompletionsRequest {
+    pub model: String,
+    pub messages: Vec<ChatCompletionMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<String>,
+    pub stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop: Option<Vec<String>>,
+}
+
+/// A single message in a Chat Completions request.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChatCompletionMessage {
+    pub role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<ChatCompletionContent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// Content of a Chat Completions message, which can be a plain string or a list of content parts.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum ChatCompletionContent {
+    /// A plain text string.
+    Text(String),
+    /// A list of content parts (for multi-modal messages).
+    Parts(Vec<ChatCompletionContentPart>),
+}
+
+/// A single part of a multi-modal Chat Completions message.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+pub enum ChatCompletionContentPart {
+    #[serde(rename = "text")]
+    Text { text: String },
+    // Future: image, audio, etc.
 }
 
 pub struct ResponseStream {

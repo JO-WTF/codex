@@ -395,6 +395,7 @@ mod review_popups;
 use self::review::ReviewState;
 #[cfg(test)]
 pub(crate) use self::review_popups::show_review_commit_picker_with_entries;
+mod provider_popups;
 mod service_tiers;
 mod settings;
 mod settings_popups;
@@ -526,10 +527,10 @@ pub(crate) enum ExternalEditorState {
 pub(crate) struct ChatWidget {
     app_event_tx: AppEventSender,
     codex_op_target: CodexOpTarget,
-    bottom_pane: BottomPane,
-    transcript: TranscriptState,
-    config: Config,
-    raw_output_mode: bool,
+	    bottom_pane: BottomPane,
+	    transcript: TranscriptState,
+	    pub(crate) config: Config,
+	    raw_output_mode: bool,
     /// Runtime value resolved by core. `config.service_tier` remains the explicit user choice.
     effective_service_tier: Option<String>,
     /// The unmasked collaboration mode settings (always Default mode).

@@ -16,6 +16,8 @@ impl ChatWidget {
             )
             && !key_hint::ctrl(KeyCode::Char('r')).is_press(key_event)
             && !key_hint::ctrl(KeyCode::Char('u')).is_press(key_event)
+            && !key_hint::ctrl(KeyCode::Char('e')).is_press(key_event)
+            && !key_hint::ctrl(KeyCode::Char('d')).is_press(key_event)
         {
             let should_pause_active_goal = self
                 .bottom_pane
@@ -156,6 +158,10 @@ impl ChatWidget {
         }
 
         if self.handle_plugins_popup_key_event(key_event) {
+            return;
+        }
+
+        if self.handle_provider_popup_key_event(key_event) {
             return;
         }
 

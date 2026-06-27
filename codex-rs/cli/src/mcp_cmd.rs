@@ -544,7 +544,7 @@ async fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) ->
         config.codex_home.to_path_buf(),
     )));
     let mcp_servers = mcp_manager.configured_servers(&config).await;
-    let effective_mcp_servers = mcp_manager.effective_servers(&config, /*auth*/ None).await;
+    let effective_mcp_servers = mcp_manager.effective_servers(&config, true, /*auth*/ None).await;
 
     let mut entries: Vec<_> = mcp_servers.iter().collect();
     entries.sort_by_key(|(name, _)| *name);

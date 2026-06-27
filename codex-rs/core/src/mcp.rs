@@ -198,9 +198,10 @@ impl McpManager {
     pub async fn effective_servers(
         &self,
         config: &Config,
+        is_openai_provider: bool,
         auth: Option<&CodexAuth>,
     ) -> HashMap<String, EffectiveMcpServer> {
         let mcp_config = self.runtime_config(config).await;
-        effective_mcp_servers(&mcp_config, auth)
+        effective_mcp_servers(&mcp_config, is_openai_provider, auth)
     }
 }

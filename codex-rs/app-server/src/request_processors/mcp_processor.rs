@@ -124,7 +124,7 @@ impl McpRequestProcessor {
         let effective_servers = self
             .thread_manager
             .mcp_manager()
-            .effective_servers(&config, auth.as_ref())
+            .effective_servers(&config, /*is_openai*/ true, auth.as_ref())
             .await;
         let Some(server) = effective_servers
             .get(&name)

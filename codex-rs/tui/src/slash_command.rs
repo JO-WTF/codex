@@ -71,6 +71,7 @@ pub enum SlashCommand {
     TestApproval,
     #[strum(serialize = "subagents")]
     MultiAgents,
+    Provider,
     // Debugging commands.
     #[strum(serialize = "debug-m-drop")]
     MemoryDrop,
@@ -140,6 +141,9 @@ impl SlashCommand {
             SlashCommand::Logout => "log out of Codex",
             SlashCommand::Rollout => "print the rollout file path",
             SlashCommand::TestApproval => "test approval request",
+            SlashCommand::Provider => {
+                "choose the model provider (OpenAI, Ollama, LM Studio, or custom)"
+            }
         }
     }
 
@@ -239,6 +243,7 @@ impl SlashCommand {
             SlashCommand::Rollout => true,
             SlashCommand::TestApproval => true,
             SlashCommand::Agent | SlashCommand::MultiAgents => true,
+            SlashCommand::Provider => true,
             SlashCommand::Theme | SlashCommand::Pets => false,
         }
     }

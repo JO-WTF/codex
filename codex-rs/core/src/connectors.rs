@@ -237,7 +237,7 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_mcp_manager(
         });
     }
 
-    let mut mcp_servers = effective_mcp_servers(&mcp_config, auth.as_ref());
+    let mut mcp_servers = effective_mcp_servers(&mcp_config, config.model_provider.is_openai(), auth.as_ref());
     mcp_servers.retain(|name, _| name == CODEX_APPS_MCP_SERVER_NAME);
     if mcp_servers.is_empty() {
         return Ok(AccessibleConnectorsStatus {

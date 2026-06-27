@@ -33,7 +33,15 @@ pub(super) fn agent_identity_authapi_base_url(
             .map_err(std::io::Error::other)?,
         None => ChatGptEnvironment::default(),
     };
-    Ok(environment.agent_identity_authapi_base_url().to_string())
+    match environment {
+        ChatGptEnvironment::Unknown => Err(std::io::Error::other(
+            "Agent Identity only supports production and staging ChatGPT environments",
+        )),
+        _ => Ok(environment
+            .agent_identity_authapi_base_url()
+            .unwrap()
+            .to_string()),
+    }
 }
 
 pub(super) fn require_agent_identity_authapi_base_url(

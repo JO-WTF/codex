@@ -30,6 +30,7 @@ use codex_app_server_protocol::SkillsListResponse;
 use codex_app_server_protocol::ThreadGoalStatus;
 use codex_connectors::AppInfo;
 use codex_file_search::FileMatch;
+use codex_model_provider_info::WireApi;
 use codex_protocol::ThreadId;
 use codex_protocol::openai_models::ModelPreset;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -139,6 +140,30 @@ pub(crate) enum KeymapEditIntent {
     ReplaceAll,
     AddAlternate,
     ReplaceOne { old_key: String },
+}
+
+/// Form preferences for adding/editing a custom model provider.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct NewProviderFormPreferences {
+    pub(crate) provider_id: String,
+    pub(crate) name: String,
+    pub(crate) base_url: String,
+    pub(crate) wire_api: WireApi,
+    pub(crate) api_key: String,
+    pub(crate) env_key: String,
+}
+
+impl Default for NewProviderFormPreferences {
+    fn default() -> Self {
+        Self {
+            provider_id: String::new(),
+            name: String::new(),
+            base_url: String::new(),
+            wire_api: WireApi::ChatCompletions,
+            api_key: String::new(),
+            env_key: String::new(),
+        }
+    }
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -697,6 +722,43 @@ pub(crate) enum AppEvent {
 
     StartCommitAnimation,
     StopCommitAnimation,
+    /// Open the model provider selection popup.
+    OpenProviderPopup,
+    /// Open the custom provider form to add a new provider.
+    OpenProviderForm {
+        /// If `Some`, pre-fill the form with these values (e.g. from editing).
+        prefill_provider: Option<Box<NewProviderFormPreferences>>,
+    },
+    /// Update the current model provider to the given provider ID.
+    UpdateModelProvider(String),
+    /// Persist the selected provider to the appropriate config.
+    PersistProviderSelection {
+        provider_id: String,
+    },
+    /// Save a newly configured provider to config, then switch to it.
+    SaveNewProvider {
+        provider_id: String,
+        name: String,
+        base_url: String,
+        wire_api: WireApi,
+        api_key: String,
+        env_key: String,
+    },
+    /// Provider form was dismissed; return to the provider list popup.
+    ProviderFormDismissed,
+    /// Provider form was saved successfully; return to provider list.
+    ProviderFormSaved {
+        provider_id: String,
+    },
+    /// Edit an existing provider; calls OpenProviderForm with pre-populated data.
+    EditProviderForm {
+        provider_id: String,
+    },
+    /// Delete a custom model provider from config.
+    DeleteProvider {
+        provider_id: String,
+    },
+
     CommitTick,
 
     /// Update the current reasoning effort in the running app and widget.

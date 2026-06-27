@@ -144,6 +144,70 @@ pub(crate) fn build_oss_provider_edit(provider: &str) -> ConfigEdit {
     replace_config_value("oss_provider", serde_json::json!(provider))
 }
 
+/// Build edits to persist the model provider ID to config.
+pub(crate) fn build_provider_selection_edits(provider_id: &str) -> Vec<ConfigEdit> {
+    vec![replace_config_value(
+        "model_provider",
+        serde_json::json!(provider_id),
+    )]
+}
+
+/// Build edits to persist a newly configured provider to config and switch to it.
+pub(crate) fn build_new_provider_edits(
+    provider_id: &str,
+    name: &str,
+    base_url: &str,
+    wire_api: codex_model_provider_info::WireApi,
+    api_key: &str,
+    env_key: &str,
+) -> Vec<ConfigEdit> {
+    let mut edits = Vec::new();
+
+    // Write the provider config
+    let wire_api_str = wire_api.to_string();
+    let provider_key = format!("model_providers.{provider_id}");
+
+    edits.push(replace_config_value(
+        format!("{provider_key}.name"),
+        serde_json::json!(name),
+    ));
+    edits.push(replace_config_value(
+        format!("{provider_key}.base_url"),
+        serde_json::json!(base_url),
+    ));
+    edits.push(replace_config_value(
+        format!("{provider_key}.wire_api"),
+        serde_json::json!(wire_api_str),
+    ));
+
+    if !api_key.is_empty() {
+        edits.push(replace_config_value(
+            format!("{provider_key}.experimental_bearer_token"),
+            serde_json::json!(api_key),
+        ));
+    }
+    if !env_key.is_empty() {
+        edits.push(replace_config_value(
+            format!("{provider_key}.env_key"),
+            serde_json::json!(env_key),
+        ));
+    }
+
+    // Switch to the new provider
+    edits.push(replace_config_value(
+        "model_provider",
+        serde_json::json!(provider_id),
+    ));
+
+    edits
+}
+
+pub(crate) fn build_provider_deletion_edits(provider_id: &str) -> Vec<ConfigEdit> {
+    let provider_key = format!("model_providers.{provider_id}");
+    // Clear the entire provider node — setting it to null removes the whole object.
+    vec![clear_config_value(&provider_key)]
+}
+
 pub(crate) async fn write_config_batch(
     request_handle: AppServerRequestHandle,
     edits: Vec<ConfigEdit>,

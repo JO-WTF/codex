@@ -7,6 +7,7 @@ use super::resize_reflow::trailing_run_start;
 use super::*;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration_flow::ExternalAgentConfigMigrationFlowOutcome;
+use crate::app_event::NewProviderFormPreferences;
 #[cfg(target_os = "windows")]
 use codex_config::types::WindowsSandboxModeToml;
 
@@ -928,6 +929,16 @@ impl App {
                 self.sync_active_thread_service_tier_to_cached_session()
                     .await;
             }
+            AppEvent::UpdateModelProvider(provider_id) => {
+                let pid = provider_id.clone();
+                self.chat_widget.set_model_provider(&provider_id);
+                self.sync_active_thread_model_setting(app_server, provider_id)
+                    .await;
+                self.sync_active_thread_service_tier_to_cached_session()
+                    .await;
+                self.chat_widget
+                    .add_info_message(format!("Provider changed to {pid}"), /*hint*/ None);
+            }
             AppEvent::UpdatePersonality(personality) => {
                 self.on_update_personality(personality);
                 self.sync_active_thread_personality_setting(app_server, personality)
@@ -952,6 +963,178 @@ impl App {
             }
             AppEvent::OpenAllModelsPopup { models } => {
                 self.chat_widget.open_all_models_popup(models);
+            }
+            AppEvent::OpenProviderPopup => {
+                self.chat_widget.open_provider_popup();
+            }
+            AppEvent::OpenProviderForm {
+                prefill_provider,
+            } => {
+                self.chat_widget
+                    .open_provider_form(prefill_provider.map(|p| *p));
+            }
+            AppEvent::PersistProviderSelection { provider_id } => {
+                match crate::config_update::write_config_batch(
+                    app_server.request_handle(),
+                    crate::config_update::build_provider_selection_edits(&provider_id),
+                )
+                .await
+                {
+                    Ok(_) => {
+                        tracing::info!("Provider changed to {provider_id}");
+                        self.chat_widget.add_info_message(
+                            format!("Model provider changed to {provider_id}"),
+                            /*hint*/ None,
+                        );
+                    }
+                    Err(err) => {
+                        let error = crate::config_update::format_config_error(&err);
+                        tracing::error!(error = %error, "failed to persist provider selection");
+                        self.chat_widget
+                            .add_error_message(format!("Failed to save default provider: {error}"));
+                    }
+                }
+            }
+            AppEvent::SaveNewProvider {
+                provider_id,
+                name,
+                base_url,
+                wire_api,
+                api_key,
+                env_key,
+            } => {
+                match crate::config_update::write_config_batch(
+                    app_server.request_handle(),
+                    crate::config_update::build_new_provider_edits(
+                        &provider_id,
+                        &name,
+                        &base_url,
+                        wire_api,
+                        &api_key,
+                        &env_key,
+                    ),
+                )
+                .await
+                {
+                    Ok(_) => {
+                        tracing::info!("New provider saved: {provider_id}");
+                        // Refresh the in-memory config so the newly saved provider
+                        // is available immediately (e.g. for set_model_provider).
+                        if let Err(err) = self.refresh_in_memory_config_from_disk().await {
+                            tracing::warn!(
+                                error = %err,
+                                "failed to refresh config after saving new provider"
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        let error = crate::config_update::format_config_error(&err);
+                        tracing::error!(error = %error, "failed to save new provider");
+                        self.chat_widget
+                            .add_error_message(format!("Failed to save new provider: {error}"));
+                    }
+                }
+            }
+            AppEvent::ProviderFormDismissed => {
+                // Return to the provider list popup
+                self.chat_widget.open_provider_popup();
+            }
+            AppEvent::ProviderFormSaved { provider_id } => {
+                // Switch to the new provider and persist the selection
+                let pid = provider_id.clone();
+                self.chat_widget.set_model_provider(&provider_id);
+                self.sync_active_thread_model_setting(app_server, provider_id)
+                    .await;
+                self.chat_widget
+                    .add_info_message(format!("Provider changed to {pid}"), /*hint*/ None);
+            }
+            AppEvent::EditProviderForm {
+                provider_id,
+            } => {
+                // provider_id is the provider name, used as key
+                let provider = self
+                    .chat_widget
+                    .config
+                    .model_providers
+                    .get(&provider_id);
+                if let Some(provider) = provider {
+                    let provider_name = provider.name.clone();
+                    let base_url = provider.base_url.clone().unwrap_or_default();
+                    let wire_api = provider.wire_api;
+                    let api_key = provider.experimental_bearer_token.clone().unwrap_or_default();
+                    let env_key = provider.env_key.clone().unwrap_or_default();
+                    self.chat_widget.open_provider_form(Some(NewProviderFormPreferences {
+                        provider_id: provider_id.clone(),
+                        name: provider_name,
+                        base_url,
+                        wire_api,
+                        api_key,
+                        env_key,
+                    }));
+                } else {
+                    self.chat_widget
+                        .add_error_message(format!("Provider {provider_id} not found in config"));
+                }
+            }
+            AppEvent::DeleteProvider {
+                provider_id,
+            } => {
+                let is_current = provider_id == self.config.model_provider_id;
+                let mut edits = crate::config_update::build_provider_deletion_edits(&provider_id);
+                if is_current {
+                    // Fall back to the first available provider, or use a sensible default.
+                    let fallback_id = self
+                        .config
+                        .model_providers
+                        .keys()
+                        .find(|k| *k != &provider_id)
+                        .cloned()
+                        .unwrap_or_else(|| "openai".to_string());
+                    tracing::info!(
+                        "Deleting current provider {provider_id}, switching to {fallback_id}"
+                    );
+                    // Also persist the switch to the fallback provider.
+                    edits.push(crate::config_update::replace_config_value(
+                        "model_provider",
+                        serde_json::json!(fallback_id),
+                    ));
+                }
+                match crate::config_update::write_config_batch(
+                    app_server.request_handle(),
+                    edits,
+                )
+                .await
+                {
+                    Ok(_) => {
+                        // Refresh the in-memory config so the deleted provider is removed
+                        // from the widget's config copy immediately.
+                        if let Err(err) = self.refresh_in_memory_config_from_disk().await {
+                            tracing::warn!(
+                                error = %err,
+                                "failed to refresh config after deleting provider"
+                            );
+                        }
+                        if is_current {
+                            let fallback_id = self
+                                .config
+                                .model_providers
+                                .keys()
+                                .find(|k| *k != &provider_id)
+                                .cloned()
+                                .unwrap_or_else(|| "openai".to_string());
+                            self.chat_widget.set_model_provider(&fallback_id);
+                            self.sync_active_thread_model_setting(app_server, fallback_id)
+                                .await;
+                        }
+                        tracing::info!("Provider deleted: {provider_id}");
+                    }
+                    Err(err) => {
+                        let error = crate::config_update::format_config_error(&err);
+                        tracing::error!(error = %error, "failed to delete provider");
+                        self.chat_widget
+                            .add_error_message(format!("Failed to delete provider: {error}"));
+                    }
+                }
             }
             AppEvent::OpenFullAccessConfirmation {
                 preset,

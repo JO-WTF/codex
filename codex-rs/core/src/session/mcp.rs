@@ -313,6 +313,9 @@ impl Session {
     ) {
         let auth = self.services.auth_manager.auth().await;
         let config = self.get_config().await;
+        if !config.model_provider.is_openai() {
+            return;
+        }
         let mcp_config = self.runtime_mcp_config(config.as_ref()).await;
         let tool_plugin_provenance = codex_mcp::tool_plugin_provenance(&mcp_config);
         let mcp_servers =

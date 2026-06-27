@@ -348,7 +348,7 @@ async fn effective_mcp_servers_preserve_runtime_servers() {
     ));
     config.mcp_server_catalog = catalog.build();
 
-    let effective = effective_mcp_servers(&config, Some(&auth));
+    let effective = effective_mcp_servers(&config, true, Some(&auth));
 
     let sample = effective.get("sample").expect("user server should exist");
     let docs = effective

@@ -271,6 +271,16 @@ impl ChatWidget {
         self.refresh_model_dependent_surfaces();
     }
 
+    /// Set the model provider ID in the widget's config copy.
+    pub(crate) fn set_model_provider(&mut self, provider_id: &str) {
+        self.config.model_provider_id = provider_id.to_string();
+        // Look up the new ModelProviderInfo from the merged model_providers map
+        if let Some(provider) = self.config.model_providers.get(provider_id) {
+            self.config.model_provider = provider.clone();
+        }
+        self.refresh_status_surfaces();
+    }
+
     pub(crate) fn current_model(&self) -> &str {
         if !self.collaboration_modes_enabled() {
             return self.current_collaboration_mode.model();

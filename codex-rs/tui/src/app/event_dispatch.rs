@@ -7,8 +7,10 @@ use super::resize_reflow::trailing_run_start;
 use super::*;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration_flow::ExternalAgentConfigMigrationFlowOutcome;
+use crate::model_catalog::ModelCatalog;
 #[cfg(target_os = "windows")]
 use codex_config::types::WindowsSandboxModeToml;
+use std::sync::Arc;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
 
@@ -838,6 +840,40 @@ impl App {
             AppEvent::OpenTokenActivity => {
                 self.chat_widget
                     .add_token_activity_output(crate::chatwidget::TokenActivityView::Daily);
+            }
+            AppEvent::OpenProviderManager => {
+                self.refresh_in_memory_config_from_disk_best_effort("opening provider manager")
+                    .await;
+                self.chat_widget.open_provider_manager();
+            }
+            AppEvent::OpenProviderDetail { id } => {
+                self.chat_widget.open_provider_detail(&id);
+            }
+            AppEvent::OpenProviderDeleteConfirm { id } => {
+                self.chat_widget.open_provider_delete_confirm(&id);
+            }
+            AppEvent::OpenProviderForm { mode, draft } => {
+                self.chat_widget.open_provider_form(mode, draft);
+            }
+            AppEvent::ProviderFormFieldSubmitted {
+                mode,
+                draft,
+                field,
+                value,
+            } => {
+                self.chat_widget
+                    .handle_provider_form_field(mode, draft, field, value);
+            }
+            AppEvent::ProviderFormWireApiSelected {
+                mode,
+                draft,
+                wire_api,
+            } => {
+                self.chat_widget
+                    .open_provider_form_confirm(mode, draft.with_wire_api(wire_api));
+            }
+            AppEvent::ProviderConfigAction { action } => {
+                self.handle_provider_config_action(app_server, action).await;
             }
             AppEvent::OpenRateLimitResetCredits => {
                 let request_id = self.chat_widget.show_rate_limit_reset_loading_popup();
@@ -2377,6 +2413,116 @@ impl App {
                 self.chat_widget
                     .add_error_message(format!("Failed to delete current thread: {err}"));
                 AppRunControl::Continue
+            }
+        }
+    }
+
+    async fn handle_provider_config_action(
+        &mut self,
+        app_server: &mut AppServerSession,
+        action: crate::app_event::ProviderConfigAction,
+    ) {
+        let builtin_ids = codex_model_provider_info::built_in_model_providers(None);
+        let (edits, success_message, refresh_models) = match action {
+            crate::app_event::ProviderConfigAction::Upsert { id, provider } => {
+                if builtin_ids.contains_key(&id) {
+                    self.chat_widget.add_error_message(format!(
+                        "Built-in provider '{id}' cannot be edited here."
+                    ));
+                    return;
+                }
+                let edit = match crate::config_update::build_model_provider_edit(&id, &provider) {
+                    Ok(edit) => edit,
+                    Err(err) => {
+                        self.chat_widget.add_error_message(format!(
+                            "Failed to serialize provider '{id}': {err}"
+                        ));
+                        return;
+                    }
+                };
+                let refresh_models = self.config.model_provider_id == id;
+                (
+                    vec![edit],
+                    format!("Saved provider '{id}'."),
+                    refresh_models,
+                )
+            }
+            crate::app_event::ProviderConfigAction::Delete { id } => {
+                if builtin_ids.contains_key(&id) {
+                    self.chat_widget
+                        .add_error_message(format!("Built-in provider '{id}' cannot be deleted."));
+                    return;
+                }
+                if !self.config.model_providers.contains_key(&id) {
+                    self.chat_widget
+                        .add_error_message(format!("Provider '{id}' does not exist."));
+                    return;
+                }
+                if self.config.model_provider_id == id {
+                    self.chat_widget.add_error_message(format!(
+                        "Provider '{id}' is selected. Choose another provider before deleting it."
+                    ));
+                    return;
+                }
+                (
+                    vec![crate::config_update::build_model_provider_delete_edit(&id)],
+                    format!("Deleted provider '{id}'."),
+                    false,
+                )
+            }
+            crate::app_event::ProviderConfigAction::Use { id } => {
+                if !self.config.model_providers.contains_key(&id) {
+                    self.chat_widget
+                        .add_error_message(format!("Provider '{id}' does not exist."));
+                    return;
+                }
+                (
+                    vec![crate::config_update::build_model_provider_selection_edit(
+                        &id,
+                    )],
+                    format!("Selected provider '{id}' for new sessions."),
+                    true,
+                )
+            }
+        };
+
+        match crate::config_update::write_config_batch(app_server.request_handle(), edits).await {
+            Ok(_) => {
+                self.refresh_in_memory_config_from_disk_best_effort("updating providers")
+                    .await;
+                self.chat_widget.add_info_message(success_message, None);
+                if refresh_models {
+                    self.refresh_model_catalog_from_app_server(app_server).await;
+                }
+                self.chat_widget.open_provider_manager();
+            }
+            Err(err) => {
+                let error = crate::config_update::format_config_error(&err);
+                self.chat_widget
+                    .add_error_message(format!("Failed to save provider configuration: {error}"));
+            }
+        }
+    }
+
+    async fn refresh_model_catalog_from_app_server(&mut self, app_server: &mut AppServerSession) {
+        match app_server.fetch_available_models().await {
+            Ok(available_models) => {
+                let model_count = available_models.len();
+                let model_catalog = Arc::new(ModelCatalog::new(available_models));
+                self.model_catalog = model_catalog.clone();
+                self.chat_widget.set_model_catalog(model_catalog);
+                self.chat_widget.add_info_message(
+                    format!(
+                        "Loaded {model_count} models for provider '{}'.",
+                        self.config.model_provider_id
+                    ),
+                    None,
+                );
+            }
+            Err(err) => {
+                self.chat_widget.add_error_message(format!(
+                    "Provider saved, but failed to refresh models: {err:#}"
+                ));
             }
         }
     }

@@ -17,6 +17,7 @@ use codex_app_server_protocol::SkillsConfigWriteParams;
 use codex_app_server_protocol::SkillsConfigWriteResponse;
 use codex_config::loader::project_trust_key;
 use codex_features::FEATURES;
+use codex_model_provider_info::ModelProviderInfo;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::TrustLevel;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -42,6 +43,10 @@ pub(crate) fn clear_config_value(key_path: impl Into<String>) -> ConfigEdit {
 pub(crate) fn app_scoped_key_path(app_id: &str, key_path: &str) -> String {
     let app_id = serde_json::Value::String(app_id.to_string()).to_string();
     format!("apps.{app_id}.{key_path}")
+}
+
+fn quoted_key_path_segment(segment: &str) -> String {
+    serde_json::Value::String(segment.to_string()).to_string()
 }
 
 pub(crate) fn format_config_error(err: &impl Display) -> String {
@@ -142,6 +147,28 @@ pub(crate) fn build_memory_settings_edits(
 
 pub(crate) fn build_oss_provider_edit(provider: &str) -> ConfigEdit {
     replace_config_value("oss_provider", serde_json::json!(provider))
+}
+
+pub(crate) fn build_model_provider_edit(
+    provider_id: &str,
+    provider: &ModelProviderInfo,
+) -> Result<ConfigEdit> {
+    let provider_value = serde_json::to_value(provider).wrap_err("serialize model provider")?;
+    Ok(replace_config_value(
+        format!("model_providers.{}", quoted_key_path_segment(provider_id)),
+        provider_value,
+    ))
+}
+
+pub(crate) fn build_model_provider_delete_edit(provider_id: &str) -> ConfigEdit {
+    clear_config_value(format!(
+        "model_providers.{}",
+        quoted_key_path_segment(provider_id)
+    ))
+}
+
+pub(crate) fn build_model_provider_selection_edit(provider_id: &str) -> ConfigEdit {
+    replace_config_value("model_provider", serde_json::json!(provider_id))
 }
 
 pub(crate) async fn write_config_batch(

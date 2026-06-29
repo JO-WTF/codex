@@ -350,6 +350,29 @@ impl AppServerSession {
         })
     }
 
+    pub(crate) async fn fetch_available_models(&mut self) -> Result<Vec<ModelPreset>> {
+        let model_request_id = self.next_request_id();
+        let models: ModelListResponse = self
+            .client
+            .request_typed(ClientRequest::ModelList {
+                request_id: model_request_id,
+                params: ModelListParams {
+                    cursor: None,
+                    limit: None,
+                    include_hidden: Some(true),
+                },
+            })
+            .await
+            .wrap_err("model/list failed while refreshing provider models")?;
+        let available_models = models
+            .data
+            .into_iter()
+            .map(model_preset_from_api_model)
+            .collect::<Vec<_>>();
+        self.available_models = available_models.clone();
+        Ok(available_models)
+    }
+
     /// Fetches the current account info without refreshing the auth token.
     ///
     /// Used by both `bootstrap` (to populate the initial UI) and `get_login_status`

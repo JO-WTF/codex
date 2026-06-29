@@ -16,6 +16,9 @@ use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::LoginAccountParams;
 use codex_app_server_protocol::LoginAccountResponse;
 use codex_login::read_openai_api_key_from_env;
+use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::WireApi;
+use codex_model_provider_info::built_in_model_providers;
 use codex_protocol::auth::AuthMode;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
@@ -45,6 +48,7 @@ use std::sync::RwLock;
 use uuid::Uuid;
 
 use crate::LoginStatus;
+use crate::config_update;
 use crate::key_hint::KeyBinding;
 use crate::key_hint::KeyBindingListExt;
 use crate::motion::MotionMode;
@@ -84,6 +88,8 @@ pub(crate) enum SignInState {
     ChatGptSuccess,
     ApiKeyEntry(ApiKeyInputState),
     ApiKeyConfigured,
+    ProviderSetup(ProviderSetupState),
+    ProviderConfigured,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,6 +97,7 @@ pub(crate) enum SignInOption {
     ChatGpt,
     DeviceCode,
     ApiKey,
+    CustomProvider,
 }
 
 const API_KEY_DISABLED_MESSAGE: &str = "API key login is disabled.";
@@ -116,6 +123,120 @@ pub(super) async fn cancel_login_attempt(
 pub(crate) struct ApiKeyInputState {
     value: String,
     prepopulated_from_env: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProviderSetupField {
+    Id,
+    Name,
+    BaseUrl,
+    EnvKey,
+    WireApi,
+    Model,
+    Confirm,
+}
+
+#[derive(Clone)]
+pub(crate) struct ProviderSetupState {
+    field: ProviderSetupField,
+    id: String,
+    name: String,
+    base_url: String,
+    env_key: String,
+    wire_api: WireApi,
+    model: String,
+    input: String,
+    is_saving: bool,
+}
+
+impl ProviderSetupState {
+    fn new() -> Self {
+        Self {
+            field: ProviderSetupField::Id,
+            id: "deepseek".to_string(),
+            name: "DeepSeek".to_string(),
+            base_url: "https://api.deepseek.com/v1".to_string(),
+            env_key: "DEEPSEEK_API_KEY".to_string(),
+            wire_api: WireApi::Chat,
+            model: "deepseek-chat".to_string(),
+            input: "deepseek".to_string(),
+            is_saving: false,
+        }
+    }
+
+    fn start_field(&mut self, field: ProviderSetupField) {
+        self.field = field;
+        self.input = match field {
+            ProviderSetupField::Id => self.id.clone(),
+            ProviderSetupField::Name => self.name.clone(),
+            ProviderSetupField::BaseUrl => self.base_url.clone(),
+            ProviderSetupField::EnvKey => self.env_key.clone(),
+            ProviderSetupField::WireApi => self.wire_api.to_string(),
+            ProviderSetupField::Model => self.model.clone(),
+            ProviderSetupField::Confirm => String::new(),
+        };
+    }
+
+    fn apply_input(&mut self) -> Result<(), String> {
+        let value = self.input.trim();
+        match self.field {
+            ProviderSetupField::Id => {
+                if value.is_empty() {
+                    return Err("Provider id cannot be empty".to_string());
+                }
+                self.id = value.to_string();
+                self.start_field(ProviderSetupField::Name);
+            }
+            ProviderSetupField::Name => {
+                if value.is_empty() {
+                    return Err("Provider name cannot be empty".to_string());
+                }
+                self.name = value.to_string();
+                self.start_field(ProviderSetupField::BaseUrl);
+            }
+            ProviderSetupField::BaseUrl => {
+                if value.is_empty() {
+                    return Err("Base URL cannot be empty".to_string());
+                }
+                self.base_url = value.to_string();
+                self.start_field(ProviderSetupField::EnvKey);
+            }
+            ProviderSetupField::EnvKey => {
+                if value.is_empty() {
+                    return Err("Env var cannot be empty; use - for no env var".to_string());
+                }
+                self.env_key = value.to_string();
+                self.start_field(ProviderSetupField::WireApi);
+            }
+            ProviderSetupField::WireApi => {
+                self.wire_api = match value {
+                    "chat" => WireApi::Chat,
+                    "responses" => WireApi::Responses,
+                    _ => return Err("wire_api must be chat or responses".to_string()),
+                };
+                self.start_field(ProviderSetupField::Model);
+            }
+            ProviderSetupField::Model => {
+                if value.is_empty() {
+                    return Err("Model id cannot be empty".to_string());
+                }
+                self.model = value.to_string();
+                self.start_field(ProviderSetupField::Confirm);
+            }
+            ProviderSetupField::Confirm => {}
+        }
+        Ok(())
+    }
+
+    fn provider(&self) -> ModelProviderInfo {
+        ModelProviderInfo {
+            name: self.name.trim().to_string(),
+            base_url: Some(self.base_url.trim().to_string()),
+            env_key: (self.env_key.trim() != "-").then(|| self.env_key.trim().to_string()),
+            wire_api: self.wire_api,
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -177,6 +298,9 @@ impl KeyboardHandler for AuthModeWidget {
         if self.handle_api_key_entry_key_event(&key_event) {
             return;
         }
+        if self.handle_provider_setup_key_event(&key_event) {
+            return;
+        }
 
         if keys::MOVE_UP.is_pressed(key_event) {
             self.move_highlight(/*delta*/ -1);
@@ -196,6 +320,10 @@ impl KeyboardHandler for AuthModeWidget {
         }
         if keys::SELECT_THIRD.is_pressed(key_event) {
             self.select_option_by_index(/*index*/ 2);
+            return;
+        }
+        if keys::SELECT_FOURTH.is_pressed(key_event) {
+            self.select_option_by_index(/*index*/ 3);
             return;
         }
         if keys::CONFIRM.is_pressed(key_event) {
@@ -218,7 +346,10 @@ impl KeyboardHandler for AuthModeWidget {
     }
 
     fn handle_paste(&mut self, pasted: String) {
-        let _ = self.handle_api_key_entry_paste(pasted);
+        if self.handle_api_key_entry_paste(pasted.clone()) {
+            return;
+        }
+        let _ = self.handle_provider_setup_paste(pasted);
     }
 }
 
@@ -319,6 +450,7 @@ impl AuthModeWidget {
         }
         if self.is_api_login_allowed() {
             options.push(SignInOption::ApiKey);
+            options.push(SignInOption::CustomProvider);
         }
         options
     }
@@ -331,6 +463,7 @@ impl AuthModeWidget {
         }
         if self.is_api_login_allowed() {
             options.push(SignInOption::ApiKey);
+            options.push(SignInOption::CustomProvider);
         }
         options
     }
@@ -372,6 +505,13 @@ impl AuthModeWidget {
             SignInOption::ApiKey => {
                 if self.is_api_login_allowed() {
                     self.start_api_key_entry();
+                } else {
+                    self.disallow_api_login();
+                }
+            }
+            SignInOption::CustomProvider => {
+                if self.is_api_login_allowed() {
+                    self.start_provider_setup();
                 } else {
                     self.disallow_api_login();
                 }
@@ -459,6 +599,14 @@ impl AuthModeWidget {
                         option,
                         "Provide your own API key",
                         "Pay for what you use",
+                    ));
+                }
+                SignInOption::CustomProvider => {
+                    lines.extend(create_mode_item(
+                        idx,
+                        option,
+                        "Configure custom provider",
+                        "Use an OpenAI-compatible provider such as DeepSeek or OpenRouter",
                     ));
                 }
             }
@@ -681,6 +829,110 @@ impl AuthModeWidget {
             .render(footer_area, buf);
     }
 
+    fn render_provider_setup(&self, area: Rect, buf: &mut Buffer, state: &ProviderSetupState) {
+        let [intro_area, input_area, footer_area] = Layout::vertical([
+            Constraint::Min(8),
+            Constraint::Length(if state.field == ProviderSetupField::Confirm {
+                0
+            } else {
+                3
+            }),
+            Constraint::Min(4),
+        ])
+        .areas(area);
+
+        let mut intro_lines: Vec<Line> = vec![
+            Line::from(vec![
+                "> ".into(),
+                "Configure a custom OpenAI-compatible provider".bold(),
+            ]),
+            "".into(),
+            "  Provider settings are stored in config.toml.".into(),
+            "  Provider API keys are read from the env var you configure below."
+                .dim()
+                .into(),
+            "".into(),
+            Line::from(vec!["  id: ".dim(), state.id.clone().into()]),
+            Line::from(vec!["  name: ".dim(), state.name.clone().into()]),
+            Line::from(vec!["  base_url: ".dim(), state.base_url.clone().into()]),
+            Line::from(vec!["  env_key: ".dim(), state.env_key.clone().into()]),
+            Line::from(vec![
+                "  wire_api: ".dim(),
+                state.wire_api.to_string().into(),
+            ]),
+            Line::from(vec!["  model: ".dim(), state.model.clone().into()]),
+            "".into(),
+        ];
+        if state.field == ProviderSetupField::Confirm {
+            intro_lines.push(if state.is_saving {
+                "  Saving provider configuration...".cyan().into()
+            } else {
+                Line::from(vec![
+                    "  Press ".cyan(),
+                    self.confirm_binding().into(),
+                    " to confirm".cyan(),
+                ])
+            });
+        }
+        Paragraph::new(intro_lines)
+            .wrap(Wrap { trim: false })
+            .render(intro_area, buf);
+
+        if state.field != ProviderSetupField::Confirm {
+            let content_line: Line = if state.input.is_empty() {
+                provider_setup_placeholder(state.field).dim().into()
+            } else {
+                Line::from(state.input.clone())
+            };
+            Paragraph::new(content_line)
+                .wrap(Wrap { trim: false })
+                .block(
+                    Block::default()
+                        .title(provider_setup_field_title(state.field))
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(Color::Cyan)),
+                )
+                .render(input_area, buf);
+        }
+
+        let mut footer_lines: Vec<Line> = vec![
+            Line::from(vec![
+                "  Press ".dim(),
+                self.confirm_binding().into(),
+                if state.field == ProviderSetupField::Confirm {
+                    " to save".dim()
+                } else {
+                    " to continue".dim()
+                },
+            ]),
+            Line::from(vec![
+                "  Press ".dim(),
+                self.cancel_binding().into(),
+                " to cancel".dim(),
+            ]),
+        ];
+        if let Some(error) = self.error_message() {
+            footer_lines.push("".into());
+            footer_lines.push(error.red().into());
+        }
+        Paragraph::new(footer_lines)
+            .wrap(Wrap { trim: false })
+            .render(footer_area, buf);
+    }
+
+    fn render_provider_configured(&self, area: Rect, buf: &mut Buffer) {
+        let lines = vec![
+            "✓ Custom provider configured".fg(Color::Green).into(),
+            "".into(),
+            "  Codex will use the selected provider and model from config.toml.".into(),
+        ];
+
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .render(area, buf);
+    }
+
     fn handle_api_key_entry_key_event(&mut self, key_event: &KeyEvent) -> bool {
         let mut should_save: Option<String> = None;
         let mut should_request_frame = false;
@@ -843,6 +1095,164 @@ impl AuthModeWidget {
         self.request_frame.schedule_frame();
     }
 
+    fn start_provider_setup(&mut self) {
+        if !self.is_api_login_allowed() {
+            self.disallow_api_login();
+            return;
+        }
+        self.set_error(/*message*/ None);
+        *self.sign_in_state.write().unwrap() =
+            SignInState::ProviderSetup(ProviderSetupState::new());
+        self.request_frame.schedule_frame();
+    }
+
+    fn handle_provider_setup_key_event(&mut self, key_event: &KeyEvent) -> bool {
+        let mut should_save: Option<ProviderSetupState> = None;
+        let mut should_request_frame = false;
+        let mut error_message: Option<String> = None;
+
+        {
+            let mut guard = self.sign_in_state.write().unwrap();
+            let SignInState::ProviderSetup(state) = &mut *guard else {
+                return false;
+            };
+
+            if state.is_saving {
+                return true;
+            }
+
+            if keys::CANCEL.is_pressed(*key_event) {
+                *guard = SignInState::PickMode;
+                self.set_error(/*message*/ None);
+                self.highlighted_mode = SignInOption::CustomProvider;
+                should_request_frame = true;
+            } else if keys::CONFIRM.is_pressed(*key_event) {
+                if state.field == ProviderSetupField::Confirm {
+                    if built_in_model_providers(None).contains_key(&state.id) {
+                        error_message = Some(format!(
+                            "Provider id '{}' is built in. Choose a custom id such as '{}-custom'.",
+                            state.id, state.id
+                        ));
+                    } else {
+                        let provider = state.provider();
+                        if let Err(err) = provider.validate() {
+                            error_message = Some(format!("Invalid provider: {err}"));
+                        } else {
+                            state.is_saving = true;
+                            should_save = Some(state.clone());
+                        }
+                    }
+                    should_request_frame = true;
+                } else {
+                    match state.apply_input() {
+                        Ok(()) => self.set_error(/*message*/ None),
+                        Err(err) => error_message = Some(err),
+                    }
+                    should_request_frame = true;
+                }
+            } else {
+                match key_event.code {
+                    KeyCode::Backspace => {
+                        state.input.pop();
+                        self.set_error(/*message*/ None);
+                        should_request_frame = true;
+                    }
+                    KeyCode::Char(c)
+                        if key_event.kind == KeyEventKind::Press
+                            && !key_event.modifiers.contains(KeyModifiers::SUPER)
+                            && !key_event.modifiers.contains(KeyModifiers::CONTROL)
+                            && !key_event.modifiers.contains(KeyModifiers::ALT)
+                            && state.field != ProviderSetupField::Confirm =>
+                    {
+                        state.input.push(c);
+                        self.set_error(/*message*/ None);
+                        should_request_frame = true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if let Some(err) = error_message {
+            self.set_error(Some(err));
+        }
+        if let Some(state) = should_save {
+            self.save_provider_setup(state);
+        } else if should_request_frame {
+            self.request_frame.schedule_frame();
+        }
+        true
+    }
+
+    fn handle_provider_setup_paste(&mut self, pasted: String) -> bool {
+        let pasted = pasted.trim();
+        if pasted.is_empty() {
+            return false;
+        }
+
+        let mut guard = self.sign_in_state.write().unwrap();
+        let SignInState::ProviderSetup(state) = &mut *guard else {
+            return false;
+        };
+        if state.field == ProviderSetupField::Confirm || state.is_saving {
+            return true;
+        }
+        state.input.push_str(pasted);
+        drop(guard);
+        self.set_error(/*message*/ None);
+        self.request_frame.schedule_frame();
+        true
+    }
+
+    fn save_provider_setup(&mut self, state: ProviderSetupState) {
+        let request_handle = self.app_server_request_handle.clone();
+        let sign_in_state = self.sign_in_state.clone();
+        let error = self.error.clone();
+        let request_frame = self.request_frame.clone();
+        tokio::spawn(async move {
+            let provider = state.provider();
+            let mut edits = match config_update::build_model_provider_edit(&state.id, &provider) {
+                Ok(edit) => vec![edit],
+                Err(err) => {
+                    *error.write().unwrap() = Some(format!(
+                        "Failed to serialize provider '{}': {err}",
+                        state.id
+                    ));
+                    let mut restored = state;
+                    restored.is_saving = false;
+                    *sign_in_state.write().unwrap() = SignInState::ProviderSetup(restored);
+                    request_frame.schedule_frame();
+                    return;
+                }
+            };
+            edits.push(config_update::build_model_provider_selection_edit(
+                &state.id,
+            ));
+            edits.extend(config_update::build_model_selection_edits(
+                &state.model,
+                Option::<String>::None,
+            ));
+
+            match config_update::write_config_batch(request_handle, edits).await {
+                Ok(_) => {
+                    *error.write().unwrap() = None;
+                    *sign_in_state.write().unwrap() = SignInState::ProviderConfigured;
+                }
+                Err(err) => {
+                    let error_message = config_update::format_config_error(&err);
+                    *error.write().unwrap() = Some(format!(
+                        "Failed to save provider configuration: {error_message}"
+                    ));
+                    let mut restored = state;
+                    restored.is_saving = false;
+                    *sign_in_state.write().unwrap() = SignInState::ProviderSetup(restored);
+                }
+            }
+            request_frame.schedule_frame();
+        });
+        self.request_frame.schedule_frame();
+    }
+
     fn handle_existing_chatgpt_login(&mut self) -> bool {
         if matches!(
             self.login_status,
@@ -965,10 +1375,13 @@ impl StepStateProvider for AuthModeWidget {
         match &*sign_in_state {
             SignInState::PickMode
             | SignInState::ApiKeyEntry(_)
+            | SignInState::ProviderSetup(_)
             | SignInState::ChatGptContinueInBrowser(_)
             | SignInState::ChatGptDeviceCode(_)
             | SignInState::ChatGptSuccessMessage => StepState::InProgress,
-            SignInState::ChatGptSuccess | SignInState::ApiKeyConfigured => StepState::Complete,
+            SignInState::ChatGptSuccess
+            | SignInState::ApiKeyConfigured
+            | SignInState::ProviderConfigured => StepState::Complete,
         }
     }
 }
@@ -998,7 +1411,37 @@ impl WidgetRef for AuthModeWidget {
             SignInState::ApiKeyConfigured => {
                 self.render_api_key_configured(area, buf);
             }
+            SignInState::ProviderSetup(state) => {
+                self.render_provider_setup(area, buf, state);
+            }
+            SignInState::ProviderConfigured => {
+                self.render_provider_configured(area, buf);
+            }
         }
+    }
+}
+
+fn provider_setup_field_title(field: ProviderSetupField) -> &'static str {
+    match field {
+        ProviderSetupField::Id => "Provider id",
+        ProviderSetupField::Name => "Display name",
+        ProviderSetupField::BaseUrl => "Base URL",
+        ProviderSetupField::EnvKey => "API key env var",
+        ProviderSetupField::WireApi => "Wire API",
+        ProviderSetupField::Model => "Default model",
+        ProviderSetupField::Confirm => "Confirm",
+    }
+}
+
+fn provider_setup_placeholder(field: ProviderSetupField) -> &'static str {
+    match field {
+        ProviderSetupField::Id => "deepseek",
+        ProviderSetupField::Name => "DeepSeek",
+        ProviderSetupField::BaseUrl => "https://api.deepseek.com/v1",
+        ProviderSetupField::EnvKey => "DEEPSEEK_API_KEY or - for no env var",
+        ProviderSetupField::WireApi => "chat or responses",
+        ProviderSetupField::Model => "deepseek-chat",
+        ProviderSetupField::Confirm => "",
     }
 }
 

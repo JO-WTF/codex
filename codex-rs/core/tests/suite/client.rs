@@ -1119,6 +1119,61 @@ async fn includes_session_id_thread_id_and_model_headers_in_request() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn chat_wire_api_requests_chat_completions_endpoint() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(body_string_contains("\"messages\""))
+        .and(body_string_contains("\"stream\":true"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_raw(
+                    concat!(
+                        "data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n",
+                        "data: {\"id\":\"chatcmpl-1\",\"choices\":[],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}\n\n",
+                        "data: [DONE]\n\n",
+                    ),
+                    "text/event-stream",
+                ),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    let mut provider =
+        built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["openai"].clone();
+    provider.name = "Test Chat".to_string();
+    provider.base_url = Some(format!("{}/v1", server.uri()));
+    provider.wire_api = WireApi::Chat;
+    provider.supports_websockets = false;
+    let codex = test_codex()
+        .with_config(move |config| {
+            config.model_provider_id = provider.name.clone();
+            config.model_provider = provider;
+        })
+        .build(&server)
+        .await
+        .unwrap()
+        .codex;
+
+    codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "hello".into(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await
+        .unwrap();
+
+    wait_for_event(&codex, |event| matches!(event, EventMsg::TurnComplete(_))).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn provider_auth_command_supplies_bearer_token() {
     skip_if_no_network!();
 

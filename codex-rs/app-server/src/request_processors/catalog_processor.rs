@@ -157,7 +157,7 @@ impl CatalogRequestProcessor {
         &self,
         params: ModelListParams,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        Self::list_models(self.thread_manager.clone(), params)
+        self.list_models(params)
             .await
             .map(|response| Some(response.into()))
     }
@@ -246,7 +246,7 @@ impl CatalogRequestProcessor {
     }
 
     async fn list_models(
-        thread_manager: Arc<ThreadManager>,
+        &self,
         params: ModelListParams,
     ) -> Result<ModelListResponse, JSONRPCErrorError> {
         let ModelListParams {
@@ -254,7 +254,40 @@ impl CatalogRequestProcessor {
             cursor,
             include_hidden,
         } = params;
-        let models = supported_models(thread_manager, include_hidden.unwrap_or(false)).await;
+        let latest_config = self.load_latest_config(None).await?;
+        let uses_startup_provider = latest_config.model_provider_id
+            == self.config.model_provider_id
+            && latest_config.model_provider == self.config.model_provider
+            && latest_config.model_catalog == self.config.model_catalog;
+        let (models_manager, refresh_strategy) = if uses_startup_provider {
+            (
+                self.thread_manager.get_models_manager(),
+                codex_models_manager::manager::RefreshStrategy::OnlineIfUncached,
+            )
+        } else {
+            let provider = create_model_provider(
+                latest_config.model_provider.clone(),
+                Some(self.auth_manager.clone()),
+            );
+            let refresh_strategy = if latest_config.model_provider.requires_openai_auth {
+                codex_models_manager::manager::RefreshStrategy::OnlineIfUncached
+            } else {
+                codex_models_manager::manager::RefreshStrategy::Online
+            };
+            (
+                provider.models_manager(
+                    latest_config.codex_home.to_path_buf(),
+                    latest_config.model_catalog.clone(),
+                ),
+                refresh_strategy,
+            )
+        };
+        let models = supported_models(
+            models_manager,
+            include_hidden.unwrap_or(false),
+            refresh_strategy,
+        )
+        .await;
         let total = models.len();
 
         if total == 0 {

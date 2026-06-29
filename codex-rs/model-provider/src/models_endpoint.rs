@@ -107,6 +107,10 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
         self.provider_info.has_command_auth()
     }
 
+    fn supports_remote_model_refresh(&self) -> bool {
+        !self.provider_info.requires_openai_auth || self.provider_info.has_command_auth()
+    }
+
     fn uses_codex_backend(&self) -> ModelsEndpointFuture<'_, bool> {
         Box::pin(OpenAiModelsEndpoint::uses_codex_backend(self))
     }

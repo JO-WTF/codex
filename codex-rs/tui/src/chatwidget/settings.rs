@@ -199,6 +199,10 @@ impl ChatWidget {
         self.model_catalog.clone()
     }
 
+    pub(crate) fn set_model_catalog(&mut self, model_catalog: Arc<ModelCatalog>) {
+        self.model_catalog = model_catalog;
+    }
+
     pub(crate) fn current_plan_type(&self) -> Option<PlanType> {
         self.plan_type
     }

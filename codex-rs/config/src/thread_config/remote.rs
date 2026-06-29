@@ -159,6 +159,7 @@ fn model_provider_from_proto(
     let id = provider.id;
     let wire_api = match proto::WireApi::try_from(provider.wire_api) {
         Ok(proto::WireApi::Responses) => WireApi::Responses,
+        Ok(proto::WireApi::Chat) => WireApi::Chat,
         Ok(proto::WireApi::Unspecified) => {
             return Err(parse_error("remote thread config omitted wire_api"));
         }
@@ -289,6 +290,7 @@ fn proto_string_map(values: HashMap<String, String>) -> proto::StringMap {
 fn proto_wire_api(wire_api: WireApi) -> proto::WireApi {
     match wire_api {
         WireApi::Responses => proto::WireApi::Responses,
+        WireApi::Chat => proto::WireApi::Chat,
     }
 }
 
@@ -421,6 +423,21 @@ mod tests {
     fn model_provider_proto_roundtrips_through_domain_type() {
         let expected = expected_provider();
         let proto = model_provider_to_proto("local", expected.clone());
+        let (id, actual) = model_provider_from_proto(proto).expect("model provider from proto");
+
+        assert_eq!(id, "local");
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn chat_wire_api_roundtrips_through_model_provider_proto() {
+        let expected = ModelProviderInfo {
+            wire_api: WireApi::Chat,
+            ..expected_provider()
+        };
+        let proto = model_provider_to_proto("local", expected.clone());
+        assert_eq!(proto.wire_api, proto::WireApi::Chat as i32);
+
         let (id, actual) = model_provider_from_proto(proto).expect("model provider from proto");
 
         assert_eq!(id, "local");

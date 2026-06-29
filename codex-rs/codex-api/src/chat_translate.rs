@@ -40,10 +40,7 @@ pub enum ChatReasoningEffort {
 #[serde(untagged)]
 pub enum ChatMessage {
     /// Plain text/content message: `{ "role", "content" }`.
-    Text {
-        role: String,
-        content: String,
-    },
+    Text { role: String, content: String },
     /// Assistant message that carries tool calls.
     AssistantWithToolCalls {
         role: String,
@@ -135,10 +132,7 @@ fn convert_tool_value(tool: &Value) -> Option<ChatTool> {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
-    let strict = tool
-        .get("strict")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let strict = tool.get("strict").and_then(Value::as_bool).unwrap_or(false);
     let parameters = tool
         .get("parameters")
         .cloned()
@@ -166,10 +160,10 @@ fn convert_tool_value(tool: &Value) -> Option<ChatTool> {
 ///   aliases to `system` (most chat providers only know `system`). Content
 ///   items are concatenated into a single string (text only; images dropped
 ///   for now as multimodal support varies by provider).
-/// - `ResponseItem::FunctionCall` / `CustomToolCall` → an assistant message
+/// - `ResponseItem::FunctionCall` → an assistant message
 ///   carrying `tool_calls`.
-/// - `ResponseItem::FunctionCallOutput` / `CustomToolCallOutput` → a
-///   `{role:"tool", tool_call_id, content}` message.
+/// - `ResponseItem::FunctionCallOutput` → a `{role:"tool", tool_call_id,
+///   content}` message.
 /// - `ResponseItem::Reasoning` → dropped (no chat equivalent; the model cannot
 ///   act on encrypted/server-side reasoning from a third-party provider).
 /// - `ResponseItem::LocalShellCall` and other Responses-native tool calls are
@@ -226,12 +220,6 @@ pub fn responses_input_to_chat_messages(
                 arguments,
                 call_id,
                 ..
-            }
-            | ResponseItem::CustomToolCall {
-                name,
-                input: arguments,
-                call_id,
-                ..
             } => {
                 let tool_call = ChatToolCall {
                     id: call_id.clone(),
@@ -243,8 +231,7 @@ pub fn responses_input_to_chat_messages(
                 };
                 push_assistant_tool_call(&mut messages, tool_call);
             }
-            ResponseItem::FunctionCallOutput { call_id, output, .. }
-            | ResponseItem::CustomToolCallOutput {
+            ResponseItem::FunctionCallOutput {
                 call_id, output, ..
             } => {
                 let content = output.body.to_text().unwrap_or_default();
@@ -257,6 +244,8 @@ pub fn responses_input_to_chat_messages(
             // Responses-only concepts with no chat equivalent.
             ResponseItem::Reasoning { .. }
             | ResponseItem::AdditionalTools { .. }
+            | ResponseItem::CustomToolCall { .. }
+            | ResponseItem::CustomToolCallOutput { .. }
             | ResponseItem::ToolSearchCall { .. }
             | ResponseItem::ToolSearchOutput { .. }
             | ResponseItem::WebSearchCall { .. }
@@ -330,7 +319,10 @@ fn push_or_merge_text(messages: &mut Vec<ChatMessage>, role: String, text: Strin
             return;
         }
     }
-    messages.push(ChatMessage::Text { role, content: text });
+    messages.push(ChatMessage::Text {
+        role,
+        content: text,
+    });
 }
 
 /// Append a tool call to the trailing assistant message if it is an

@@ -1,6 +1,6 @@
 use super::*;
-use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ContentItem;
+use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseItem;
 use serde_json::json;
 
@@ -67,7 +67,11 @@ fn instructions_become_leading_system_message() {
 #[test]
 fn no_instructions_means_no_system_message() {
     let messages = responses_input_to_chat_messages(&[user_msg("hi")], "");
-    assert!(messages.iter().all(|m| !matches!(m, ChatMessage::Text { role, .. } if role == "system")));
+    assert!(
+        messages
+            .iter()
+            .all(|m| !matches!(m, ChatMessage::Text { role, .. } if role == "system"))
+    );
 }
 
 #[test]
@@ -82,10 +86,7 @@ fn developer_role_aliases_to_system() {
 
 #[test]
 fn consecutive_same_role_text_messages_are_merged() {
-    let messages = responses_input_to_chat_messages(
-        &[user_msg("hello"), user_msg("world")],
-        "",
-    );
+    let messages = responses_input_to_chat_messages(&[user_msg("hello"), user_msg("world")], "");
     assert_eq!(messages.len(), 1);
     match &messages[0] {
         ChatMessage::Text { role, content } => {
@@ -98,10 +99,7 @@ fn consecutive_same_role_text_messages_are_merged() {
 
 #[test]
 fn assistant_then_user_keeps_separate_messages() {
-    let messages = responses_input_to_chat_messages(
-        &[assistant_msg("hi"), user_msg("bye")],
-        "",
-    );
+    let messages = responses_input_to_chat_messages(&[assistant_msg("hi"), user_msg("bye")], "");
     assert_eq!(messages.len(), 2);
 }
 
@@ -116,7 +114,11 @@ fn parallel_function_calls_group_into_one_assistant_message() {
     );
     assert_eq!(messages.len(), 1);
     match &messages[0] {
-        ChatMessage::AssistantWithToolCalls { tool_calls, content, role } => {
+        ChatMessage::AssistantWithToolCalls {
+            tool_calls,
+            content,
+            role,
+        } => {
             assert_eq!(role, "assistant");
             assert!(content.is_none());
             assert_eq!(tool_calls.len(), 2);
@@ -157,13 +159,16 @@ fn function_call_output_becomes_tool_role_message() {
 #[test]
 fn reasoning_items_are_dropped() {
     let messages = responses_input_to_chat_messages(
-        &[user_msg("hi"), ResponseItem::Reasoning {
-            id: None,
-            summary: vec![],
-            content: None,
-            encrypted_content: None,
-            internal_chat_message_metadata_passthrough: None,
-        }],
+        &[
+            user_msg("hi"),
+            ResponseItem::Reasoning {
+                id: None,
+                summary: vec![],
+                content: None,
+                encrypted_content: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ],
         "",
     );
     assert_eq!(messages.len(), 1);

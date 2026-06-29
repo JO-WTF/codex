@@ -37,6 +37,12 @@ pub trait ModelsEndpointClient: fmt::Debug + Send + Sync {
     /// Returns whether the currently resolved auth can use Codex backend-only models.
     fn uses_codex_backend(&self) -> ModelsEndpointFuture<'_, bool>;
 
+    /// Returns whether this endpoint should be queried for remote models when
+    /// Codex backend auth is not active.
+    fn supports_remote_model_refresh(&self) -> bool {
+        self.has_command_auth()
+    }
+
     /// Fetches the latest remote model catalog and optional ETag.
     fn list_models<'a>(
         &'a self,
@@ -341,7 +347,8 @@ impl OpenAiModelsManager {
     }
 
     async fn should_refresh_models(&self) -> bool {
-        self.endpoint_client.uses_codex_backend().await || self.endpoint_client.has_command_auth()
+        self.endpoint_client.uses_codex_backend().await
+            || self.endpoint_client.supports_remote_model_refresh()
     }
 
     async fn get_etag(&self) -> Option<String> {

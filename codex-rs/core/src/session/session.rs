@@ -655,36 +655,14 @@ impl Session {
         ));
 
         let auth_manager_clone = Arc::clone(&auth_manager);
-        let config_for_mcp = Arc::clone(&config);
-        let mcp_manager_for_mcp = Arc::clone(&mcp_manager);
-        let mcp_thread_init_for_startup = &mcp_thread_init;
-        let auth_and_mcp_fut = async move {
-            let auth = auth_manager_clone.auth().await;
-            let mcp_config = mcp_manager_for_mcp
-                .runtime_config_for_thread(&config_for_mcp, mcp_thread_init_for_startup)
-                .await;
-            let mcp_servers = codex_mcp::effective_mcp_servers(&mcp_config, auth.as_ref());
-            let tool_plugin_provenance = codex_mcp::tool_plugin_provenance(&mcp_config);
-            let auth_statuses = compute_auth_statuses(
-                mcp_servers.iter(),
-                config_for_mcp.mcp_oauth_credentials_store_mode,
-                config_for_mcp.auth_keyring_backend_kind(),
-                auth.as_ref(),
-            )
-            .await;
-            (auth, mcp_servers, auth_statuses, tool_plugin_provenance)
-        }
-        .instrument(info_span!(
-            "session_init.auth_mcp",
-            otel.name = "session_init.auth_mcp",
+        let auth_fut = async move { auth_manager_clone.auth().await }.instrument(info_span!(
+            "session_init.auth",
+            otel.name = "session_init.auth",
         ));
 
         // Join all independent futures.
-        let (
-            thread_persistence_result,
-            state_db_ctx,
-            (auth, mcp_servers, auth_statuses, tool_plugin_provenance),
-        ) = tokio::join!(thread_persistence_fut, state_db_fut, auth_and_mcp_fut);
+        let (thread_persistence_result, state_db_ctx, auth) =
+            tokio::join!(thread_persistence_fut, state_db_fut, auth_fut);
 
         let mut live_thread_init =
             LiveThreadInitGuard::new(thread_persistence_result.map_err(|e| {
@@ -825,7 +803,7 @@ impl Session {
                 config
                     .permissions
                     .legacy_sandbox_policy(session_configuration.cwd().as_path()),
-                mcp_servers.keys().map(String::as_str).collect(),
+                config.mcp_servers.get().keys().map(String::as_str).collect(),
             );
 
             let use_zsh_fork_shell = config.features.enabled(Feature::ShellZshFork);
@@ -1175,11 +1153,12 @@ impl Session {
                     cwd,
                 )
             };
+            let mcp_servers = HashMap::new();
             let mcp_connection_manager = McpConnectionManager::new(
                 &mcp_servers,
                 config.mcp_oauth_credentials_store_mode,
                 config.auth_keyring_backend_kind(),
-                auth_statuses,
+                HashMap::new(),
                 &session_configuration.approval_policy,
                 INITIAL_SUBMIT_ID.to_owned(),
                 tx_event.clone(),
@@ -1193,7 +1172,7 @@ impl Session {
                 sess.services
                     .supports_openai_form_elicitation
                     .load(std::sync::atomic::Ordering::Relaxed),
-                tool_plugin_provenance,
+                codex_mcp::ToolPluginProvenance::default(),
                 auth,
                 Some(sess.mcp_elicitation_reviewer()),
             )
@@ -1205,6 +1184,18 @@ impl Session {
             sess.services
                 .install_mcp_connection_manager(mcp_connection_manager)
                 .await?;
+            let deferred_mcp_config = sess.runtime_mcp_config(&config).await;
+            *sess.pending_mcp_server_refresh_config.lock().await = Some(McpServerRefreshConfig {
+                mcp_servers: serde_json::to_value(codex_mcp::configured_mcp_servers(
+                    &deferred_mcp_config,
+                ))?,
+                mcp_oauth_credentials_store_mode: serde_json::to_value(
+                    config.mcp_oauth_credentials_store_mode,
+                )?,
+                auth_keyring_backend_kind: serde_json::to_value(
+                    config.auth_keyring_backend_kind(),
+                )?,
+            });
             sess.schedule_startup_prewarm(session_configuration.base_instructions.clone())
                 .await;
             let session_start_source = match &initial_history {

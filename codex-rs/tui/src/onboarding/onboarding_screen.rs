@@ -90,6 +90,7 @@ pub(crate) struct OnboardingScreenArgs {
 
 pub(crate) struct OnboardingResult {
     pub directory_trust_persisted: bool,
+    pub provider_config_persisted: bool,
     pub should_exit: bool,
 }
 
@@ -270,6 +271,19 @@ impl OnboardingScreen {
                 }
             })
             .unwrap_or_default()
+    }
+
+    fn provider_config_persisted(&self) -> bool {
+        self.steps.iter().any(|step| {
+            matches!(
+                step,
+                Step::Auth(widget)
+                    if widget
+                        .sign_in_state
+                        .read()
+                        .is_ok_and(|state| matches!(&*state, SignInState::ProviderConfigured))
+            )
+        })
     }
 }
 
@@ -570,6 +584,7 @@ pub(crate) async fn run_onboarding_app(
     }
     Ok(OnboardingResult {
         directory_trust_persisted,
+        provider_config_persisted: onboarding_screen.provider_config_persisted(),
         should_exit: onboarding_screen.should_exit(),
     })
 }

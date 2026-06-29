@@ -30,6 +30,8 @@ use codex_app_server_protocol::SkillsListResponse;
 use codex_app_server_protocol::ThreadGoalStatus;
 use codex_connectors::AppInfo;
 use codex_file_search::FileMatch;
+use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::WireApi;
 use codex_protocol::ThreadId;
 use codex_protocol::openai_models::ModelPreset;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -139,6 +141,50 @@ pub(crate) enum KeymapEditIntent {
     ReplaceAll,
     AddAlternate,
     ReplaceOne { old_key: String },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ProviderConfigAction {
+    Upsert {
+        id: String,
+        provider: ModelProviderInfo,
+    },
+    Delete {
+        id: String,
+    },
+    Use {
+        id: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProviderFormMode {
+    Add,
+    Edit,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProviderFormField {
+    Id,
+    Name,
+    BaseUrl,
+    EnvKey,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProviderFormDraft {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) base_url: String,
+    pub(crate) env_key: String,
+    pub(crate) wire_api: WireApi,
+}
+
+impl ProviderFormDraft {
+    pub(crate) fn with_wire_api(mut self, wire_api: WireApi) -> Self {
+        self.wire_api = wire_api;
+        self
+    }
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -311,6 +357,45 @@ pub(crate) enum AppEvent {
 
     /// Open the default token-activity view selected from the `/usage` menu.
     OpenTokenActivity,
+
+    /// Open the provider management popup.
+    OpenProviderManager,
+
+    /// Open details for a specific model provider.
+    OpenProviderDetail {
+        id: String,
+    },
+
+    /// Confirm deletion for a model provider.
+    OpenProviderDeleteConfirm {
+        id: String,
+    },
+
+    /// Open the add/edit provider form.
+    OpenProviderForm {
+        mode: ProviderFormMode,
+        draft: ProviderFormDraft,
+    },
+
+    /// Apply one submitted provider form field and continue the form.
+    ProviderFormFieldSubmitted {
+        mode: ProviderFormMode,
+        draft: ProviderFormDraft,
+        field: ProviderFormField,
+        value: String,
+    },
+
+    /// Apply a selected provider wire API and continue the form.
+    ProviderFormWireApiSelected {
+        mode: ProviderFormMode,
+        draft: ProviderFormDraft,
+        wire_api: WireApi,
+    },
+
+    /// Persist a provider configuration mutation.
+    ProviderConfigAction {
+        action: ProviderConfigAction,
+    },
 
     /// Open the reset-credit flow selected from the `/usage` menu.
     OpenRateLimitResetCredits,

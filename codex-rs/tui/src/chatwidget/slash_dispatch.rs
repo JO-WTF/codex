@@ -272,6 +272,9 @@ impl ChatWidget {
                 self.open_model_popup();
                 self.defer_input_until_settings_applied();
             }
+            SlashCommand::Providers => {
+                self.open_provider_manager();
+            }
             SlashCommand::Personality => {
                 self.open_personality_popup();
                 self.defer_input_until_settings_applied();
@@ -684,6 +687,9 @@ impl ChatWidget {
                 "verbose" => self.add_mcp_output(McpServerStatusDetail::Full),
                 _ => self.add_error_message("Usage: /mcp [verbose]".to_string()),
             },
+            SlashCommand::Providers => {
+                self.handle_provider_command_args(trimmed);
+            }
             SlashCommand::Keymap => match trimmed.to_ascii_lowercase().as_str() {
                 "" => self.open_keymap_picker(),
                 "debug" => {
@@ -1049,6 +1055,7 @@ impl ChatWidget {
             | SlashCommand::MemoryDrop
             | SlashCommand::MemoryUpdate
             | SlashCommand::Mcp
+            | SlashCommand::Providers
             | SlashCommand::Apps
             | SlashCommand::Plugins
             | SlashCommand::Rollout

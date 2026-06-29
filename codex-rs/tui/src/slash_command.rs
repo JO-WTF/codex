@@ -56,6 +56,7 @@ pub enum SlashCommand {
     #[strum(to_string = "pets", serialize = "pet")]
     Pets,
     Mcp,
+    Providers,
     Apps,
     Plugins,
     Logout,
@@ -135,6 +136,7 @@ impl SlashCommand {
             SlashCommand::AutoReview => "approve one retry of a recent auto-review denial",
             SlashCommand::Memories => "configure memory use and generation",
             SlashCommand::Mcp => "list configured MCP tools; use /mcp verbose for details",
+            SlashCommand::Providers => "manage model providers",
             SlashCommand::Apps => "manage apps",
             SlashCommand::Plugins => "browse plugins",
             SlashCommand::Logout => "log out of Codex",
@@ -160,6 +162,7 @@ impl SlashCommand {
                 | SlashCommand::Ide
                 | SlashCommand::Keymap
                 | SlashCommand::Mcp
+                | SlashCommand::Providers
                 | SlashCommand::Raw
                 | SlashCommand::Usage
                 | SlashCommand::Pets
@@ -209,6 +212,7 @@ impl SlashCommand {
             SlashCommand::Diff
             | SlashCommand::Resume
             | SlashCommand::Model
+            | SlashCommand::Providers
             | SlashCommand::Personality
             | SlashCommand::Permissions
             | SlashCommand::Copy

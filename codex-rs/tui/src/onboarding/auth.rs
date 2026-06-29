@@ -146,6 +146,7 @@ pub(crate) struct ProviderSetupState {
     wire_api: WireApi,
     model: String,
     input: String,
+    input_is_prefill: bool,
     is_saving: bool,
 }
 
@@ -160,6 +161,7 @@ impl ProviderSetupState {
             wire_api: WireApi::Chat,
             model: "deepseek-chat".to_string(),
             input: "deepseek".to_string(),
+            input_is_prefill: true,
             is_saving: false,
         }
     }
@@ -175,6 +177,7 @@ impl ProviderSetupState {
             ProviderSetupField::Model => self.model.clone(),
             ProviderSetupField::Confirm => String::new(),
         };
+        self.input_is_prefill = field != ProviderSetupField::Confirm;
     }
 
     fn apply_input(&mut self) -> Result<(), String> {
@@ -425,6 +428,27 @@ impl AuthModeWidget {
         self.sign_in_state.read().is_ok_and(
             |guard| matches!(&*guard, SignInState::ApiKeyEntry(state) if !state.value.is_empty()),
         )
+    }
+
+    /// Returns whether the custom-provider setup flow is editing a text field.
+    pub(crate) fn is_provider_setup_text_entry_active(&self) -> bool {
+        self.sign_in_state.read().is_ok_and(|guard| {
+            matches!(
+                &*guard,
+                SignInState::ProviderSetup(state)
+                    if state.field != ProviderSetupField::Confirm && !state.is_saving
+            )
+        })
+    }
+
+    /// Returns whether the custom-provider setup field currently contains text.
+    pub(crate) fn provider_setup_has_text(&self) -> bool {
+        self.sign_in_state.read().is_ok_and(|guard| {
+            matches!(
+                &*guard,
+                SignInState::ProviderSetup(state) if !state.input.is_empty()
+            )
+        })
     }
 
     fn confirm_binding(&self) -> KeyBinding {
@@ -1153,7 +1177,12 @@ impl AuthModeWidget {
             } else {
                 match key_event.code {
                     KeyCode::Backspace => {
-                        state.input.pop();
+                        if state.input_is_prefill {
+                            state.input.clear();
+                            state.input_is_prefill = false;
+                        } else {
+                            state.input.pop();
+                        }
                         self.set_error(/*message*/ None);
                         should_request_frame = true;
                     }
@@ -1164,6 +1193,10 @@ impl AuthModeWidget {
                             && !key_event.modifiers.contains(KeyModifiers::ALT)
                             && state.field != ProviderSetupField::Confirm =>
                     {
+                        if state.input_is_prefill {
+                            state.input.clear();
+                            state.input_is_prefill = false;
+                        }
                         state.input.push(c);
                         self.set_error(/*message*/ None);
                         should_request_frame = true;
@@ -1196,6 +1229,10 @@ impl AuthModeWidget {
         };
         if state.field == ProviderSetupField::Confirm || state.is_saving {
             return true;
+        }
+        if state.input_is_prefill {
+            state.input.clear();
+            state.input_is_prefill = false;
         }
         state.input.push_str(pasted);
         drop(guard);

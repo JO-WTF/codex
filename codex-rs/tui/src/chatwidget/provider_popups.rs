@@ -32,7 +32,6 @@ impl ChatWidget {
             SelectionItem {
                 name: "Add provider".to_string(),
                 description: Some("Create a custom OpenAI-compatible provider".to_string()),
-                display_shortcut: Some(provider_shortcut('a')),
                 actions: vec![Box::new(|tx| {
                     tx.send(AppEvent::OpenProviderForm {
                         mode: ProviderFormMode::Add,
@@ -51,7 +50,6 @@ impl ChatWidget {
             SelectionItem {
                 name: "Refresh list".to_string(),
                 description: Some("Reload provider configuration from disk".to_string()),
-                display_shortcut: Some(provider_shortcut('r')),
                 actions: vec![Box::new(|tx| tx.send(AppEvent::OpenProviderManager))],
                 dismiss_on_select: true,
                 ..Default::default()

@@ -2481,7 +2481,7 @@ impl App {
                         &id,
                     )],
                     format!("Selected provider '{id}' for new sessions."),
-                    true,
+                    false,
                 )
             }
         };

@@ -38,3 +38,15 @@ fn format_config_error_preserves_server_validation_message() {
          features.fast_mode=true violates managed requirements; allowed set [fast_mode=false]"
     );
 }
+
+#[test]
+fn build_model_selection_edit_writes_only_model_without_clear_values() {
+    assert_eq!(
+        build_model_selection_edit("roma-model"),
+        ConfigEdit {
+            key_path: "model".to_string(),
+            value: serde_json::json!("roma-model"),
+            merge_strategy: MergeStrategy::Replace,
+        }
+    );
+}

@@ -1265,10 +1265,7 @@ impl AuthModeWidget {
             edits.push(config_update::build_model_provider_selection_edit(
                 &state.id,
             ));
-            edits.extend(config_update::build_model_selection_edits(
-                &state.model,
-                Option::<String>::None,
-            ));
+            edits.push(config_update::build_model_selection_edit(&state.model));
 
             match config_update::write_config_batch(request_handle, edits).await {
                 Ok(_) => {

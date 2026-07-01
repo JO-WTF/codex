@@ -23,6 +23,7 @@ use codex_protocol::config_types::TrustLevel;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::WrapErr;
+use serde_json::Map as JsonMap;
 use serde_json::Value as JsonValue;
 use std::fmt::Display;
 use std::path::Path;
@@ -154,11 +155,34 @@ pub(crate) fn build_model_provider_edit(
     provider_id: &str,
     provider: &ModelProviderInfo,
 ) -> Result<ConfigEdit> {
-    let provider_value = serde_json::to_value(provider).wrap_err("serialize model provider")?;
+    let mut provider_value = serde_json::to_value(provider).wrap_err("serialize model provider")?;
+    strip_json_null_values(&mut provider_value);
     Ok(replace_config_value(
         format!("model_providers.{}", quoted_key_path_segment(provider_id)),
         provider_value,
     ))
+}
+
+fn strip_json_null_values(value: &mut JsonValue) {
+    match value {
+        JsonValue::Object(object) => {
+            let mut stripped = JsonMap::new();
+            for (key, mut value) in std::mem::take(object) {
+                strip_json_null_values(&mut value);
+                if !value.is_null() {
+                    stripped.insert(key, value);
+                }
+            }
+            *object = stripped;
+        }
+        JsonValue::Array(values) => {
+            for value in values.iter_mut() {
+                strip_json_null_values(value);
+            }
+            values.retain(|value| !value.is_null());
+        }
+        JsonValue::Null | JsonValue::Bool(_) | JsonValue::Number(_) | JsonValue::String(_) => {}
+    }
 }
 
 pub(crate) fn build_model_provider_delete_edit(provider_id: &str) -> ConfigEdit {

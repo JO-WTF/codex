@@ -50,3 +50,30 @@ fn build_model_selection_edit_writes_only_model_without_clear_values() {
         }
     );
 }
+
+#[test]
+fn build_model_provider_edit_omits_null_fields() {
+    let provider = ModelProviderInfo {
+        name: "Roma".to_string(),
+        base_url: Some("http://sim.isc.huawei.com:8080/v1".to_string()),
+        env_key: Some("DEEPSEEK_API_KEY".to_string()),
+        wire_api: codex_model_provider_info::WireApi::Chat,
+        ..Default::default()
+    };
+
+    let edit = build_model_provider_edit("roma", &provider).expect("provider edit");
+
+    assert_eq!(edit.key_path, "model_providers.\"roma\"");
+    assert_eq!(edit.merge_strategy, MergeStrategy::Replace);
+    assert_eq!(
+        edit.value,
+        serde_json::json!({
+            "name": "Roma",
+            "base_url": "http://sim.isc.huawei.com:8080/v1",
+            "env_key": "DEEPSEEK_API_KEY",
+            "wire_api": "chat",
+            "requires_openai_auth": false,
+            "supports_websockets": false,
+        })
+    );
+}

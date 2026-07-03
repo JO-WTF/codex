@@ -5,6 +5,77 @@ provider support, provider management in the TUI, Chat Completions transport
 support, and provider/model-list decoupling. It is intended as an engineering
 review aid, not as user-facing product documentation.
 
+## Rebase Strategy
+
+Keep the provider feature as a set of small layer-owned seams when rebasing:
+
+- Preserve upstream toolchain/build configuration unless the provider feature directly requires a change; local compiler workarounds create unnecessary conflicts.
+- Keep Chat Completions support isolated in `codex-api` translation/SSE modules and route to it from `core/src/client.rs` only at the `WireApi` decision point.
+- Keep provider-management UI in the dedicated `chatwidget/provider_popups.rs` module instead of adding more orchestration to `chatwidget.rs`; update only the event bridge when upstream TUI event plumbing changes.
+- Keep cached custom-provider models stored on `ModelProviderInfo.models`; do not merge them into the built-in OpenAI catalog.
+
+
+## Branch Review Decisions
+
+This section records the branch-level review from upstream commit `f959e7f`
+through the provider branch head. The goal is to keep future rebases mechanical:
+when upstream changes one layer, reapply only the matching seam below.
+
+### Changed during review
+
+- **Provider model cache isolation.** Custom providers now use a
+  provider-namespaced model cache instead of sharing the default
+  `models_cache.json`. This avoids a rebase-hostile hidden coupling where a
+  fresh cache from provider A could satisfy provider B before B's `/models`
+  endpoint was queried. The change belongs in `models-manager` because cache
+  policy is owned there, while provider identity is supplied through the
+  `ModelsEndpointClient` seam. Built-in OpenAI providers keep the legacy cache
+  file name for compatibility.
+- **Redundant ETag read cleanup.** `refresh_if_new_etag` no longer reads the
+  current ETag twice. The second read was harmless but increased diff noise and
+  made future conflict resolution less obvious.
+
+### Reviewed and intentionally left unchanged
+
+- **Chat Completions translation remains lossy at the API boundary.** Dropping
+  Responses-only concepts such as encrypted reasoning, stateful
+  `previous_response_id`, and hosted OpenAI tools is intentional. Keeping that
+  loss localized in `codex-api/src/chat_translate.rs` prevents plumbing
+  chat-specific conditionals through core turn execution.
+- **Core request routing stays as a single `WireApi` branch.** The branch adds
+  Chat Completions support without changing the Responses/WebSocket paths for
+  native providers. This is the smallest durable seam: future upstream changes
+  to Responses transport should usually apply on the Responses arm without
+  touching chat translation.
+- **App-server `model/list` keeps `forceRefresh` as the opt-in refresh knob.**
+  This avoids making every model picker open perform a network call, while still
+  giving provider setup and explicit fetch flows a way to bypass cached provider
+  models.
+- **Provider management UI remains isolated in `chatwidget/provider_popups.rs`.**
+  The file is large but still below the repository's hard 800-LoC guidance for
+  complex modules, and extracting smaller one-use helper modules would increase
+  rebase surface rather than reduce it. The main `chatwidget.rs` only imports
+  the module and remains orchestration-focused.
+- **Onboarding keeps provider setup in the existing auth screen.** The first-run
+  flow is already the owner of credential decisions, so adding a custom-provider
+  branch there avoids a separate startup state machine. Future improvements
+  should extract only if multiple provider setup screens start sharing logic.
+- **Config serialization strips null provider fields.** This keeps generated
+  `config.toml` edits minimal and avoids writing noisy clears into user config,
+  which is important when rebasing across upstream config-shape changes.
+- **Schema and TypeScript fixture updates stay checked in.** The branch changes
+  app-server API shape (`ModelListParams.forceRefresh`), so generated protocol
+  fixtures are part of the intentional patch rather than incidental churn.
+
+### Follow-up risks to re-check after future rebases
+
+- Re-run the app-server schema generator if upstream changes any v2 model-list
+  payloads or config RPC conventions.
+- Re-run TUI snapshot tests whenever provider popup text or model-picker
+  behavior changes; these are user-visible UI surfaces.
+- Re-check Chat Completions SSE parsing if upstream adds new `ResponseEvent`
+  variants required by tool-call lifecycle accounting.
+
 ## Behavior Summary
 
 The branch introduces a custom provider flow across three layers:

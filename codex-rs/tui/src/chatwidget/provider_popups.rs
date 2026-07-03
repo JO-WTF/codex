@@ -78,7 +78,7 @@ impl ChatWidget {
 
         let header = providers_header(
             "Manage Providers",
-            "Enter opens details. Add and edit use an interactive form.",
+            "Review provider details. Add and edit use an interactive form.",
         );
         self.bottom_pane.show_selection_view(SelectionViewParams {
             is_searchable: true,

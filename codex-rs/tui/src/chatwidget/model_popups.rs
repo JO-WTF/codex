@@ -197,7 +197,7 @@ impl ChatWidget {
                 Self::model_selection_actions(
                     model_for_action,
                     effort_for_action,
-                    false,
+                    /*preserve_provider*/ false,
                 )
             } else {
                 vec![Box::new(move |tx| {

@@ -117,6 +117,18 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
         !self.provider_info.requires_openai_auth
     }
 
+    fn cache_namespace(&self) -> Option<String> {
+        if self.provider_info.requires_openai_auth {
+            None
+        } else {
+            Some(format!(
+                "{}:{}",
+                self.provider_info.name,
+                self.provider_info.base_url.as_deref().unwrap_or_default()
+            ))
+        }
+    }
+
     fn uses_codex_backend(&self) -> ModelsEndpointFuture<'_, bool> {
         Box::pin(OpenAiModelsEndpoint::uses_codex_backend(self))
     }

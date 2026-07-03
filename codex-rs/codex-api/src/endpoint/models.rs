@@ -88,13 +88,12 @@ impl<T: HttpTransport> ModelsClient<T> {
             struct OpenAiModelsData {
                 data: Vec<OpenAiModelEntry>,
             }
-            let data: OpenAiModelsData = serde_json::from_slice(&resp.body)
-                .map_err(|e| {
-                    ApiError::Stream(format!(
-                        "failed to decode OpenAI /v1/models response: {e}; body: {}",
-                        String::from_utf8_lossy(&resp.body)
-                    ))
-                })?;
+            let data: OpenAiModelsData = serde_json::from_slice(&resp.body).map_err(|e| {
+                ApiError::Stream(format!(
+                    "failed to decode OpenAI /v1/models response: {e}; body: {}",
+                    String::from_utf8_lossy(&resp.body)
+                ))
+            })?;
             data.data.into_iter().map(ModelInfo::from).collect()
         } else {
             let ModelsResponse { models } = serde_json::from_slice::<ModelsResponse>(&resp.body)

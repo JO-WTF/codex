@@ -35,24 +35,6 @@ when upstream changes one layer, reapply only the matching seam below.
   current ETag twice. The second read was harmless but increased diff noise and
   made future conflict resolution less obvious.
 
-
-### Built-in provider retention review
-
-The branch intentionally keeps the runtime-defined Amazon Bedrock, Ollama, and
-LM Studio provider definitions because they are not inert examples:
-
-- **Amazon Bedrock** is routed through a dedicated `AmazonBedrockModelProvider`
-  implementation when the provider metadata matches the Bedrock provider.
-  Removing the built-in provider entry would break the supported
-  `model_provider = "amazon-bedrock"` configuration path and its AWS override
-  validation.
-- **Ollama** and **LM Studio** are used by the local-model / OSS flows. The exec
-  and TUI local-provider paths resolve the built-in provider IDs, probe local
-  ports, and prepare/download models through the provider-specific crates. They
-  should remain registered, but the provider manager now displays them under a
-  separate **Local OSS providers** section so they are not confused with OpenAI
-  native or custom remote providers.
-
 ### Reviewed and intentionally left unchanged
 
 - **Chat Completions translation remains lossy at the API boundary.** Dropping
@@ -84,12 +66,6 @@ LM Studio provider definitions because they are not inert examples:
 - **Schema and TypeScript fixture updates stay checked in.** The branch changes
   app-server API shape (`ModelListParams.forceRefresh`), so generated protocol
   fixtures are part of the intentional patch rather than incidental churn.
-
-- **Model picker changes remain reverted.** The model picker already receives the
-  active provider's catalog from app/app-server state, so adding provider-aware
-  copy or altered no-effort selection behavior in `chatwidget/model_popups.rs`
-  would increase UI churn without creating a stronger provider seam. Provider
-  switching and provider explanation stay in the provider manager instead.
 
 ### Follow-up risks to re-check after future rebases
 

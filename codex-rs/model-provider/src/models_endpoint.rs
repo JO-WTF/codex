@@ -119,26 +119,14 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
 
     fn cache_namespace(&self) -> Option<String> {
         if self.provider_info.requires_openai_auth {
-            return None;
+            None
+        } else {
+            Some(format!(
+                "{}:{}",
+                self.provider_info.name,
+                self.provider_info.base_url.as_deref().unwrap_or_default()
+            ))
         }
-
-        let auth_fingerprint = self
-            .provider_info
-            .env_key
-            .as_deref()
-            .or(self
-                .provider_info
-                .auth
-                .as_ref()
-                .map(|auth| auth.command.as_str()))
-            .unwrap_or_default();
-        Some(format!(
-            "{}:{}:{}:{}",
-            self.provider_info.name,
-            self.provider_info.wire_api,
-            self.provider_info.base_url.as_deref().unwrap_or_default(),
-            auth_fingerprint
-        ))
     }
 
     fn uses_codex_backend(&self) -> ModelsEndpointFuture<'_, bool> {
@@ -287,33 +275,5 @@ mod tests {
         );
 
         assert!(!endpoint.has_command_auth());
-    }
-
-    #[test]
-    fn cache_namespace_includes_provider_transport_and_auth_identity() {
-        let mut first = provider_info_with_command_auth();
-        first.name = "custom".to_string();
-        first.base_url = Some("https://provider.example/v1".to_string());
-
-        let mut second = first.clone();
-        second.auth.as_mut().expect("auth should exist").command = "other-token".to_string();
-
-        let first_endpoint = OpenAiModelsEndpoint::new(first, /*auth_manager*/ None);
-        let second_endpoint = OpenAiModelsEndpoint::new(second, /*auth_manager*/ None);
-
-        assert_ne!(
-            first_endpoint.cache_namespace(),
-            second_endpoint.cache_namespace()
-        );
-    }
-
-    #[test]
-    fn openai_auth_provider_keeps_legacy_shared_cache_namespace() {
-        let endpoint = OpenAiModelsEndpoint::new(
-            ModelProviderInfo::create_openai_provider(/*base_url*/ None),
-            /*auth_manager*/ None,
-        );
-
-        assert_eq!(endpoint.cache_namespace(), None);
     }
 }

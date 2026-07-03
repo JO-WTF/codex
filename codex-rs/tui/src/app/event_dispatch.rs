@@ -2423,7 +2423,14 @@ impl App {
         action: crate::app_event::ProviderConfigAction,
     ) {
         let builtin_ids = codex_model_provider_info::built_in_model_providers(None);
-        let (edits, success_message, refresh_models) = match action {
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum ProviderPostSaveAction {
+            None,
+            RefreshCurrentProvider,
+            SelectAndOpenModels,
+        }
+
+        let (edits, success_message, post_save_action) = match action {
             crate::app_event::ProviderConfigAction::Upsert { id, provider } => {
                 if builtin_ids.contains_key(&id) {
                     self.chat_widget.add_error_message(format!(
@@ -2440,12 +2447,24 @@ impl App {
                         return;
                     }
                 };
-                let refresh_models = self.config.model_provider_id == id;
-                (
-                    vec![edit],
-                    format!("Saved provider '{id}'."),
-                    refresh_models,
-                )
+                let provider_is_new = !self.config.model_providers.contains_key(&id);
+                let mut edits = vec![edit];
+                let post_save_action = if provider_is_new {
+                    edits.push(crate::config_update::build_model_provider_selection_edit(
+                        &id,
+                    ));
+                    ProviderPostSaveAction::SelectAndOpenModels
+                } else if self.config.model_provider_id == id {
+                    ProviderPostSaveAction::RefreshCurrentProvider
+                } else {
+                    ProviderPostSaveAction::None
+                };
+                let success_message = if provider_is_new {
+                    format!("Saved and selected provider '{id}'.")
+                } else {
+                    format!("Saved provider '{id}'.")
+                };
+                (edits, success_message, post_save_action)
             }
             crate::app_event::ProviderConfigAction::Delete { id } => {
                 if builtin_ids.contains_key(&id) {
@@ -2467,7 +2486,7 @@ impl App {
                 (
                     vec![crate::config_update::build_model_provider_delete_edit(&id)],
                     format!("Deleted provider '{id}'."),
-                    false,
+                    ProviderPostSaveAction::None,
                 )
             }
             crate::app_event::ProviderConfigAction::Use { id } => {
@@ -2481,7 +2500,7 @@ impl App {
                         &id,
                     )],
                     format!("Selected provider '{id}' for new sessions."),
-                    false,
+                    ProviderPostSaveAction::None,
                 )
             }
         };
@@ -2491,10 +2510,22 @@ impl App {
                 self.refresh_in_memory_config_from_disk_best_effort("updating providers")
                     .await;
                 self.chat_widget.add_info_message(success_message, None);
-                if refresh_models {
-                    self.refresh_model_catalog_from_app_server(app_server).await;
+                let refresh_succeeded = match post_save_action {
+                    ProviderPostSaveAction::None => false,
+                    ProviderPostSaveAction::RefreshCurrentProvider
+                    | ProviderPostSaveAction::SelectAndOpenModels => {
+                        self.refresh_model_catalog_from_app_server(app_server).await
+                    }
+                };
+                if matches!(
+                    post_save_action,
+                    ProviderPostSaveAction::SelectAndOpenModels
+                ) && refresh_succeeded
+                {
+                    self.chat_widget.open_model_popup();
+                } else {
+                    self.chat_widget.open_provider_manager();
                 }
-                self.chat_widget.open_provider_manager();
             }
             Err(err) => {
                 let error = crate::config_update::format_config_error(&err);
@@ -2504,7 +2535,10 @@ impl App {
         }
     }
 
-    async fn refresh_model_catalog_from_app_server(&mut self, app_server: &mut AppServerSession) {
+    async fn refresh_model_catalog_from_app_server(
+        &mut self,
+        app_server: &mut AppServerSession,
+    ) -> bool {
         match app_server.fetch_available_models().await {
             Ok(available_models) => {
                 let model_count = available_models.len();
@@ -2518,11 +2552,13 @@ impl App {
                     ),
                     None,
                 );
+                true
             }
             Err(err) => {
                 self.chat_widget.add_error_message(format!(
                     "Provider saved, but failed to refresh models: {err:#}"
                 ));
+                false
             }
         }
     }

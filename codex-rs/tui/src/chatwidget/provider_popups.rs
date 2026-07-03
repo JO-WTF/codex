@@ -198,6 +198,7 @@ impl ChatWidget {
             footer_hint: Some(standard_popup_hint_line()),
             items,
             header,
+            on_cancel: Some(Box::new(|tx| tx.send(AppEvent::OpenProviderManager))),
             ..Default::default()
         });
         self.request_redraw();
@@ -214,10 +215,18 @@ impl ChatWidget {
             title: Some(format!("Delete {title}?")),
             subtitle: Some("This removes the provider from config.toml.".to_string()),
             footer_hint: Some(standard_popup_hint_line()),
+            on_cancel: Some(Box::new({
+                let id = id.to_string();
+                move |tx| tx.send(AppEvent::OpenProviderDetail { id: id.clone() })
+            })),
             items: vec![
                 SelectionItem {
                     name: "Cancel".to_string(),
                     description: Some("Keep this provider".to_string()),
+                    actions: vec![Box::new({
+                        let id = id.to_string();
+                        move |tx| tx.send(AppEvent::OpenProviderDetail { id: id.clone() })
+                    })],
                     dismiss_on_select: true,
                     ..Default::default()
                 },
@@ -292,6 +301,7 @@ impl ChatWidget {
             title: Some(provider_form_title(mode).to_string()),
             footer_hint: Some(standard_popup_hint_line()),
             header: provider_form_confirm_header(&draft),
+            on_cancel: Some(Box::new(|tx| tx.send(AppEvent::OpenProviderManager))),
             items: vec![
                 SelectionItem {
                     name: action_label.to_string(),
@@ -374,6 +384,7 @@ impl ChatWidget {
             title: Some("Provider wire API".to_string()),
             subtitle: Some("Choose how Codex should talk to this provider.".to_string()),
             footer_hint: Some(standard_popup_hint_line()),
+            on_cancel: Some(Box::new(|tx| tx.send(AppEvent::OpenProviderManager))),
             items: vec![
                 wire_api_item(mode, draft.clone(), WireApi::Chat),
                 wire_api_item(mode, draft, WireApi::Responses),

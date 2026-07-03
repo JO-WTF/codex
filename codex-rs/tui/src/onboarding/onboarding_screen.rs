@@ -95,10 +95,10 @@ pub(crate) struct OnboardingResult {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct ApiKeyEntryContext {
-    /// True when onboarding is currently rendering the API-key entry state.
+struct TextEntryContext {
+    /// True when onboarding is currently rendering a text-entry state.
     active: bool,
-    /// True when the API-key input field currently contains user text.
+    /// True when the input field currently contains text.
     has_text: bool,
 }
 
@@ -257,14 +257,17 @@ impl OnboardingScreen {
         }
     }
 
-    fn api_key_entry_context(&self) -> ApiKeyEntryContext {
+    fn text_entry_context(&self) -> TextEntryContext {
         self.steps
             .iter()
             .find_map(|step| {
                 if let Step::Auth(widget) = step {
-                    Some(ApiKeyEntryContext {
-                        active: widget.is_api_key_entry_active(),
-                        has_text: widget.api_key_entry_has_text(),
+                    let api_key_active = widget.is_api_key_entry_active();
+                    let provider_setup_active = widget.is_provider_setup_text_entry_active();
+                    Some(TextEntryContext {
+                        active: api_key_active || provider_setup_active,
+                        has_text: widget.api_key_entry_has_text()
+                            || widget.provider_setup_has_text(),
                     })
                 } else {
                     None
@@ -290,19 +293,18 @@ impl OnboardingScreen {
 impl KeyboardHandler for OnboardingScreen {
     /// Route key events to onboarding steps while preserving text-entry safety.
     ///
-    /// In API-key entry mode, printable quit bindings are suppressed only after
-    /// the user has started typing in the API-key field. This keeps the
-    /// printable `q` quit key usable on an empty field while protecting in-progress
-    /// text entry from accidental exits. Control/alt quit chords still work as
-    /// emergency exits.
+    /// In onboarding text-entry modes, printable quit bindings are suppressed
+    /// after the input contains text. This keeps the printable `q` quit key
+    /// usable on an empty field while protecting in-progress text entry from
+    /// accidental exits. Control/alt quit chords still work as emergency exits.
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         if !matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
             return;
         }
-        let api_key_entry_context = self.api_key_entry_context();
+        let text_entry_context = self.text_entry_context();
         let should_quit = key_event.kind == KeyEventKind::Press
             && keys::QUIT.is_pressed(key_event)
-            && !suppress_quit_while_typing_api_key(key_event, api_key_entry_context);
+            && !suppress_quit_while_typing(key_event, text_entry_context);
         if should_quit {
             if self.is_auth_in_progress() {
                 self.cancel_auth_if_active();
@@ -350,16 +352,13 @@ impl KeyboardHandler for OnboardingScreen {
 
 /// Returns `true` when a quit shortcut should be ignored as text input.
 ///
-/// This only applies while API-key entry is active and the key is a printable
-/// character without control/alt modifiers and there is already text in the
-/// input field. Empty input intentionally does not trigger suppression so
-/// the printable `q` quit key can still exit onboarding.
-fn suppress_quit_while_typing_api_key(
-    key_event: KeyEvent,
-    api_key_entry_context: ApiKeyEntryContext,
-) -> bool {
-    api_key_entry_context.active
-        && api_key_entry_context.has_text
+/// This only applies while an onboarding text-entry field is active and the
+/// key is a printable character without control/alt modifiers. Empty input
+/// intentionally does not trigger suppression so the printable `q` quit key can
+/// still exit onboarding before the user starts typing.
+fn suppress_quit_while_typing(key_event: KeyEvent, text_entry_context: TextEntryContext) -> bool {
+    text_entry_context.active
+        && text_entry_context.has_text
         && matches!(key_event.code, KeyCode::Char(_))
         && !key_event
             .modifiers
@@ -638,12 +637,12 @@ async fn persist_selected_trust(
 
 #[cfg(test)]
 mod tests {
-    use super::ApiKeyEntryContext;
     use super::OnboardingScreen;
     use super::Step;
     use super::StepStateProvider;
+    use super::TextEntryContext;
     use super::persist_selected_trust;
-    use super::suppress_quit_while_typing_api_key;
+    use super::suppress_quit_while_typing;
     use crate::onboarding::trust_directory::TrustDirectorySelection;
     use crate::onboarding::trust_directory::TrustDirectoryWidget;
     use crate::tui::FrameRequester;
@@ -654,10 +653,10 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn suppresses_printable_quit_key_during_api_key_entry() {
-        let suppressed = suppress_quit_while_typing_api_key(
+    fn suppresses_printable_quit_key_during_text_entry() {
+        let suppressed = suppress_quit_while_typing(
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
-            ApiKeyEntryContext {
+            TextEntryContext {
                 active: true,
                 has_text: true,
             },
@@ -667,9 +666,9 @@ mod tests {
 
     #[test]
     fn does_not_suppress_printable_quit_key_when_api_key_input_is_empty() {
-        let suppressed = suppress_quit_while_typing_api_key(
+        let suppressed = suppress_quit_while_typing(
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
-            ApiKeyEntryContext {
+            TextEntryContext {
                 active: true,
                 has_text: false,
             },
@@ -678,10 +677,10 @@ mod tests {
     }
 
     #[test]
-    fn does_not_suppress_control_quit_key_during_api_key_entry() {
-        let suppressed = suppress_quit_while_typing_api_key(
+    fn does_not_suppress_control_quit_key_during_text_entry() {
+        let suppressed = suppress_quit_while_typing(
             KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL),
-            ApiKeyEntryContext {
+            TextEntryContext {
                 active: true,
                 has_text: true,
             },
@@ -690,10 +689,10 @@ mod tests {
     }
 
     #[test]
-    fn does_not_suppress_when_not_in_api_key_entry() {
-        let suppressed = suppress_quit_while_typing_api_key(
+    fn does_not_suppress_when_not_in_text_entry() {
+        let suppressed = suppress_quit_while_typing(
             KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
-            ApiKeyEntryContext {
+            TextEntryContext {
                 active: false,
                 has_text: true,
             },

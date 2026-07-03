@@ -11,7 +11,7 @@ use crate::app_event::ProviderFormDraft;
 use crate::app_event::ProviderFormField;
 use crate::app_event::ProviderFormMode;
 
-const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use] ...";
+const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use|fetch] ...";
 
 impl ChatWidget {
     pub(crate) fn open_provider_manager(&mut self) {
@@ -32,7 +32,6 @@ impl ChatWidget {
             SelectionItem {
                 name: "Add provider".to_string(),
                 description: Some("Create a custom OpenAI-compatible provider".to_string()),
-                display_shortcut: Some(provider_shortcut('a')),
                 actions: vec![Box::new(|tx| {
                     tx.send(AppEvent::OpenProviderForm {
                         mode: ProviderFormMode::Add,
@@ -51,36 +50,30 @@ impl ChatWidget {
             SelectionItem {
                 name: "Refresh list".to_string(),
                 description: Some("Reload provider configuration from disk".to_string()),
-                display_shortcut: Some(provider_shortcut('r')),
                 actions: vec![Box::new(|tx| tx.send(AppEvent::OpenProviderManager))],
                 dismiss_on_select: true,
                 ..Default::default()
             },
         ];
 
-        for (id, provider, is_builtin) in providers {
-            let title = provider_title(&id, &provider);
-            let description = Some(provider_description(&provider, is_builtin));
-            let detail_id = id.clone();
-            items.push(SelectionItem {
-                name: title,
-                description,
-                is_current: id == current_provider_id,
-                actions: vec![Box::new(move |tx| {
-                    tx.send(AppEvent::OpenProviderDetail {
-                        id: detail_id.clone(),
-                    });
-                })],
-                dismiss_on_select: false,
-                search_value: Some(format!(
-                    "{} {} {} {}",
-                    id,
-                    provider.name,
-                    provider.base_url.unwrap_or_default(),
-                    provider.env_key.unwrap_or_default()
-                )),
-                ..Default::default()
-            });
+        push_provider_section(
+            &mut items,
+            "Built-in providers",
+            "OpenAI providers managed by Codex; existing model behavior is unchanged.",
+        );
+        for (id, provider, is_builtin) in providers.iter().filter(|(_, _, is_builtin)| *is_builtin)
+        {
+            push_provider_list_item(&mut items, id, provider, *is_builtin, &current_provider_id);
+        }
+
+        push_provider_section(
+            &mut items,
+            "Custom providers",
+            "OpenAI-compatible providers you manage, with provider-specific cached models.",
+        );
+        for (id, provider, is_builtin) in providers.iter().filter(|(_, _, is_builtin)| !*is_builtin)
+        {
+            push_provider_list_item(&mut items, id, provider, *is_builtin, &current_provider_id);
         }
 
         let header = providers_header(
@@ -122,6 +115,33 @@ impl ChatWidget {
                     move |tx| {
                         tx.send(AppEvent::ProviderConfigAction {
                             action: crate::app_event::ProviderConfigAction::Use { id: id.clone() },
+                        });
+                    }
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Fetch models".to_string(),
+                description: Some(if is_builtin {
+                    "Built-in providers use Codex's built-in model catalog".to_string()
+                } else if provider.models.is_empty() {
+                    "Fetch this provider's models, cache them, then choose one".to_string()
+                } else {
+                    format!(
+                        "Refresh {} cached models, then choose one",
+                        provider.models.len()
+                    )
+                }),
+                display_shortcut: Some(provider_shortcut('f')),
+                is_disabled: is_builtin,
+                actions: vec![Box::new({
+                    let id = id.to_string();
+                    move |tx| {
+                        tx.send(AppEvent::ProviderConfigAction {
+                            action: crate::app_event::ProviderConfigAction::FetchModels {
+                                id: id.clone(),
+                            },
                         });
                     }
                 })],
@@ -200,6 +220,7 @@ impl ChatWidget {
             footer_hint: Some(standard_popup_hint_line()),
             items,
             header,
+            on_cancel: Some(Box::new(|tx| tx.send(AppEvent::OpenProviderManager))),
             ..Default::default()
         });
         self.request_redraw();
@@ -216,10 +237,18 @@ impl ChatWidget {
             title: Some(format!("Delete {title}?")),
             subtitle: Some("This removes the provider from config.toml.".to_string()),
             footer_hint: Some(standard_popup_hint_line()),
+            on_cancel: Some(Box::new({
+                let id = id.to_string();
+                move |tx| tx.send(AppEvent::OpenProviderDetail { id: id.clone() })
+            })),
             items: vec![
                 SelectionItem {
                     name: "Cancel".to_string(),
                     description: Some("Keep this provider".to_string()),
+                    actions: vec![Box::new({
+                        let id = id.to_string();
+                        move |tx| tx.send(AppEvent::OpenProviderDetail { id: id.clone() })
+                    })],
                     dismiss_on_select: true,
                     ..Default::default()
                 },
@@ -294,6 +323,7 @@ impl ChatWidget {
             title: Some(provider_form_title(mode).to_string()),
             footer_hint: Some(standard_popup_hint_line()),
             header: provider_form_confirm_header(&draft),
+            on_cancel: Some(Box::new(|tx| tx.send(AppEvent::OpenProviderManager))),
             items: vec![
                 SelectionItem {
                     name: action_label.to_string(),
@@ -376,6 +406,7 @@ impl ChatWidget {
             title: Some("Provider wire API".to_string()),
             subtitle: Some("Choose how Codex should talk to this provider.".to_string()),
             footer_hint: Some(standard_popup_hint_line()),
+            on_cancel: Some(Box::new(|tx| tx.send(AppEvent::OpenProviderManager))),
             items: vec![
                 wire_api_item(mode, draft.clone(), WireApi::Chat),
                 wire_api_item(mode, draft, WireApi::Responses),
@@ -451,6 +482,7 @@ impl ChatWidget {
             "edit" => self.handle_provider_upsert_args(rest, /*is_edit*/ true),
             "delete" | "remove" => self.handle_provider_delete_args(rest),
             "use" | "select" => self.handle_provider_use_args(rest),
+            "fetch" | "models" => self.handle_provider_fetch_args(rest),
             _ => self.add_error_message(PROVIDERS_USAGE.to_string()),
         }
     }
@@ -538,6 +570,56 @@ impl ChatWidget {
             action: crate::app_event::ProviderConfigAction::Use { id: id.clone() },
         });
     }
+
+    fn handle_provider_fetch_args(&mut self, args: &[String]) {
+        let [id] = args else {
+            self.add_error_message("Usage: /providers fetch <id>".to_string());
+            return;
+        };
+        self.app_event_tx.send(AppEvent::ProviderConfigAction {
+            action: crate::app_event::ProviderConfigAction::FetchModels { id: id.clone() },
+        });
+    }
+}
+
+fn push_provider_section(items: &mut Vec<SelectionItem>, name: &str, description: &str) {
+    items.push(SelectionItem {
+        name: name.to_string(),
+        description: Some(description.to_string()),
+        is_disabled: true,
+        ..Default::default()
+    });
+}
+
+fn push_provider_list_item(
+    items: &mut Vec<SelectionItem>,
+    id: &str,
+    provider: &ModelProviderInfo,
+    is_builtin: bool,
+    current_provider_id: &str,
+) {
+    let title = provider_title(id, provider);
+    let description = Some(provider_description(provider, is_builtin));
+    let detail_id = id.to_string();
+    items.push(SelectionItem {
+        name: title,
+        description,
+        is_current: id == current_provider_id,
+        actions: vec![Box::new(move |tx| {
+            tx.send(AppEvent::OpenProviderDetail {
+                id: detail_id.clone(),
+            });
+        })],
+        dismiss_on_select: false,
+        search_value: Some(format!(
+            "{} {} {} {}",
+            id,
+            provider.name,
+            provider.base_url.clone().unwrap_or_default(),
+            provider.env_key.clone().unwrap_or_default()
+        )),
+        ..Default::default()
+    });
 }
 
 fn provider_title(id: &str, provider: &ModelProviderInfo) -> String {

@@ -6,8 +6,8 @@ use std::path::PathBuf;
 /// specified by the `CODEX_HOME` environment variable. If not set, defaults to
 /// `~/.codex`.
 ///
-/// - If `CODEX_HOME` is set, the value must exist and be a directory. The
-///   value will be canonicalized and this function will Err otherwise.
+/// - If `CODEX_HOME` is set, the value is created when missing, must be a
+///   directory, and is canonicalized before being returned.
 /// - If `CODEX_HOME` is not set, this function does not verify that the
 ///   directory exists.
 pub fn find_codex_home() -> std::io::Result<AbsolutePathBuf> {
@@ -23,18 +23,31 @@ fn find_codex_home_from_env(codex_home_env: Option<&str>) -> std::io::Result<Abs
     match codex_home_env {
         Some(val) => {
             let path = PathBuf::from(val);
-            let metadata = std::fs::metadata(&path).map_err(|err| match err.kind() {
-                std::io::ErrorKind::NotFound => std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("CODEX_HOME points to {val:?}, but that path does not exist"),
-                ),
-                _ => std::io::Error::new(
-                    err.kind(),
-                    format!("failed to read CODEX_HOME {val:?}: {err}"),
-                ),
-            })?;
+            match std::fs::metadata(&path) {
+                Ok(metadata) if !metadata.is_dir() => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("CODEX_HOME points to {val:?}, but that path is not a directory"),
+                    ));
+                }
+                Ok(_) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    std::fs::create_dir_all(&path).map_err(|err| {
+                        std::io::Error::new(
+                            err.kind(),
+                            format!("failed to create CODEX_HOME {val:?}: {err}"),
+                        )
+                    })?;
+                }
+                Err(err) => {
+                    return Err(std::io::Error::new(
+                        err.kind(),
+                        format!("failed to read CODEX_HOME {val:?}: {err}"),
+                    ));
+                }
+            }
 
-            if !metadata.is_dir() {
+            if !path.is_dir() {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     format!("CODEX_HOME points to {val:?}, but that path is not a directory"),
@@ -73,19 +86,18 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn find_codex_home_env_missing_path_is_fatal() {
+    fn find_codex_home_env_missing_path_is_created() {
         let temp_home = TempDir::new().expect("temp home");
         let missing = temp_home.path().join("missing-codex-home");
         let missing_str = missing
             .to_str()
             .expect("missing codex home path should be valid utf-8");
 
-        let err = find_codex_home_from_env(Some(missing_str)).expect_err("missing CODEX_HOME");
-        assert_eq!(err.kind(), ErrorKind::NotFound);
-        assert!(
-            err.to_string().contains("CODEX_HOME"),
-            "unexpected error: {err}"
-        );
+        let resolved = find_codex_home_from_env(Some(missing_str)).expect("created CODEX_HOME");
+        let expected = missing.canonicalize().expect("canonicalize created home");
+        let expected = AbsolutePathBuf::from_absolute_path(expected).expect("absolute home");
+        assert_eq!(resolved, expected);
+        assert!(missing.is_dir());
     }
 
     #[test]

@@ -253,10 +253,12 @@ impl CatalogRequestProcessor {
             limit,
             cursor,
             include_hidden,
+            force_refresh,
         } = params;
         let latest_config = self.load_latest_config(None).await?;
-        let uses_startup_provider = latest_config.model_provider_id
-            == self.config.model_provider_id
+        let force_refresh = force_refresh.unwrap_or(false);
+        let uses_startup_provider = !force_refresh
+            && latest_config.model_provider_id == self.config.model_provider_id
             && latest_config.model_provider == self.config.model_provider
             && latest_config.model_catalog == self.config.model_catalog;
         let (models_manager, refresh_strategy) = if uses_startup_provider {
@@ -265,11 +267,15 @@ impl CatalogRequestProcessor {
                 codex_models_manager::manager::RefreshStrategy::OnlineIfUncached,
             )
         } else {
-            let provider = create_model_provider(
-                latest_config.model_provider.clone(),
-                Some(self.auth_manager.clone()),
-            );
-            let refresh_strategy = if latest_config.model_provider.requires_openai_auth {
+            let mut provider_info = latest_config.model_provider.clone();
+            if force_refresh {
+                provider_info.models.clear();
+            }
+            let provider =
+                create_model_provider(provider_info.clone(), Some(self.auth_manager.clone()));
+            let refresh_strategy = if force_refresh {
+                codex_models_manager::manager::RefreshStrategy::Online
+            } else if provider_info.requires_openai_auth {
                 codex_models_manager::manager::RefreshStrategy::OnlineIfUncached
             } else {
                 codex_models_manager::manager::RefreshStrategy::Online

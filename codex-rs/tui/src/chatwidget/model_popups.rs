@@ -142,9 +142,12 @@ impl ChatWidget {
             });
         }
 
+        let provider_id = self.config.model_provider_id.as_str();
         let header = self.model_menu_header(
             "Select Model",
-            "Pick a quick auto mode or browse all models.",
+            &format!(
+                "Showing models for provider '{provider_id}'. Switch providers to use a different model set."
+            ),
         );
         self.bottom_pane.show_selection_view(SelectionViewParams {
             footer_hint: Some(standard_popup_hint_line()),
@@ -201,9 +204,12 @@ impl ChatWidget {
             });
         }
 
+        let provider_id = self.config.model_provider_id.as_str();
         let header = self.model_menu_header(
             "Select Model and Effort",
-            "Access legacy models by running codex -m <model_name> or in your config.toml",
+            &format!(
+                "Showing models for provider '{provider_id}'. Switch providers to use a different model set."
+            ),
         );
         self.bottom_pane.show_selection_view(SelectionViewParams {
             footer_hint: Some(self.bottom_pane.standard_popup_hint_line()),

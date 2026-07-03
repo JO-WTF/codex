@@ -155,6 +155,9 @@ pub(crate) enum ProviderConfigAction {
     Use {
         id: String,
     },
+    FetchModels {
+        id: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

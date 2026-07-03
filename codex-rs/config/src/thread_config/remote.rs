@@ -191,6 +191,7 @@ fn model_provider_from_proto(
         websocket_connect_timeout_ms: provider.websocket_connect_timeout_ms,
         requires_openai_auth: provider.requires_openai_auth,
         supports_websockets: provider.supports_websockets,
+        models: Vec::new(),
     };
     Ok((id, info))
 }
@@ -209,6 +210,7 @@ fn model_provider_to_proto(
         auth,
         aws: _,
         wire_api,
+        models: _,
         query_params,
         http_headers,
         env_http_headers,
@@ -433,6 +435,7 @@ mod tests {
     fn chat_wire_api_roundtrips_through_model_provider_proto() {
         let expected = ModelProviderInfo {
             wire_api: WireApi::Chat,
+            models: Vec::new(),
             ..expected_provider()
         };
         let proto = model_provider_to_proto("local", expected.clone());
@@ -535,6 +538,7 @@ mod tests {
                 cwd: workspace_dir(),
             }),
             wire_api: WireApi::Responses,
+            models: Vec::new(),
             query_params: Some(HashMap::from([(
                 "api-version".to_string(),
                 "2026-04-16".to_string(),

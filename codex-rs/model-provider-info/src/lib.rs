@@ -13,6 +13,7 @@ use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::EnvVarError;
 use codex_protocol::error::Result as CodexResult;
+use codex_protocol::openai_models::ModelPreset;
 use http::HeaderMap;
 use http::header::HeaderName;
 use http::header::HeaderValue;
@@ -101,6 +102,45 @@ impl<'de> Deserialize<'de> for WireApi {
     }
 }
 
+/// User-configurable model metadata cached under a custom provider.
+///
+/// Third-party providers own their model namespace, so fetched models are stored
+/// with the provider instead of being merged into Codex's built-in OpenAI catalog.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct ProviderModelInfo {
+    /// Provider-specific model identifier used on API requests.
+    pub model_id: String,
+    /// Friendly model name shown in Codex UI. Defaults to `model_id`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+    /// Maximum input context length advertised or configured for this model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_token_len: Option<i64>,
+    /// Maximum output tokens advertised or configured for this model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<i64>,
+    /// Whether this model should be displayed in the model picker.
+    #[serde(default = "default_provider_model_show_in_picker")]
+    pub show_in_picker: bool,
+}
+
+fn default_provider_model_show_in_picker() -> bool {
+    true
+}
+
+impl From<&ModelPreset> for ProviderModelInfo {
+    fn from(model: &ModelPreset) -> Self {
+        Self {
+            model_id: model.model.clone(),
+            model_name: (model.display_name != model.model).then(|| model.display_name.clone()),
+            max_token_len: None,
+            max_output_tokens: None,
+            show_in_picker: model.show_in_picker,
+        }
+    }
+}
+
 /// Serializable representation of a provider definition.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
@@ -127,6 +167,9 @@ pub struct ModelProviderInfo {
     /// Which wire protocol this provider expects.
     #[serde(default)]
     pub wire_api: WireApi,
+    /// Custom-provider models fetched from that provider and cached in config.toml.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub models: Vec<ProviderModelInfo>,
     /// Optional query parameters to append to the base URL.
     pub query_params: Option<HashMap<String, String>>,
     /// Additional HTTP headers to include in requests to this provider where
@@ -353,6 +396,7 @@ impl ModelProviderInfo {
             auth: None,
             aws: None,
             wire_api: WireApi::Responses,
+            models: Vec::new(),
             query_params: None,
             http_headers: Some(
                 [("version".to_string(), env!("CARGO_PKG_VERSION").to_string())]
@@ -395,6 +439,7 @@ impl ModelProviderInfo {
                 region: None,
             })),
             wire_api: WireApi::Responses,
+            models: Vec::new(),
             query_params: None,
             http_headers: Some(HashMap::from([(
                 AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_HEADER.to_string(),
@@ -424,6 +469,15 @@ impl ModelProviderInfo {
 
     pub fn has_command_auth(&self) -> bool {
         self.auth.is_some()
+    }
+
+    /// Returns whether this provider uses the Chat wire protocol (`/v1/chat/completions`).
+    ///
+    /// Chat-protocol providers typically expose the standard OpenAI `/v1/models`
+    /// endpoint with `{"data": [...]}` format, while Responses-protocol providers
+    /// use the Codex-native `{"models": [...]}` format.
+    pub fn is_chat_wire_api(&self) -> bool {
+        self.wire_api == WireApi::Chat
     }
 }
 
@@ -529,6 +583,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         auth: None,
         aws: None,
         wire_api,
+        models: Vec::new(),
         query_params: None,
         http_headers: None,
         env_http_headers: None,

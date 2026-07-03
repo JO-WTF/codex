@@ -146,6 +146,7 @@ pub(crate) struct ProviderSetupState {
     wire_api: WireApi,
     model: String,
     input: String,
+    input_is_prefill: bool,
     is_saving: bool,
 }
 
@@ -160,6 +161,7 @@ impl ProviderSetupState {
             wire_api: WireApi::Chat,
             model: "deepseek-chat".to_string(),
             input: "deepseek".to_string(),
+            input_is_prefill: true,
             is_saving: false,
         }
     }
@@ -171,10 +173,11 @@ impl ProviderSetupState {
             ProviderSetupField::Name => self.name.clone(),
             ProviderSetupField::BaseUrl => self.base_url.clone(),
             ProviderSetupField::EnvKey => self.env_key.clone(),
-            ProviderSetupField::WireApi => self.wire_api.to_string(),
+            ProviderSetupField::WireApi => String::new(),
             ProviderSetupField::Model => self.model.clone(),
             ProviderSetupField::Confirm => String::new(),
         };
+        self.input_is_prefill = field != ProviderSetupField::Confirm;
     }
 
     fn apply_input(&mut self) -> Result<(), String> {
@@ -209,11 +212,6 @@ impl ProviderSetupState {
                 self.start_field(ProviderSetupField::WireApi);
             }
             ProviderSetupField::WireApi => {
-                self.wire_api = match value {
-                    "chat" => WireApi::Chat,
-                    "responses" => WireApi::Responses,
-                    _ => return Err("wire_api must be chat or responses".to_string()),
-                };
                 self.start_field(ProviderSetupField::Model);
             }
             ProviderSetupField::Model => {
@@ -234,6 +232,7 @@ impl ProviderSetupState {
             base_url: Some(self.base_url.trim().to_string()),
             env_key: (self.env_key.trim() != "-").then(|| self.env_key.trim().to_string()),
             wire_api: self.wire_api,
+            models: Vec::new(),
             ..Default::default()
         }
     }
@@ -425,6 +424,30 @@ impl AuthModeWidget {
         self.sign_in_state.read().is_ok_and(
             |guard| matches!(&*guard, SignInState::ApiKeyEntry(state) if !state.value.is_empty()),
         )
+    }
+
+    /// Returns whether the custom-provider setup flow is editing a text field.
+    pub(crate) fn is_provider_setup_text_entry_active(&self) -> bool {
+        self.sign_in_state.read().is_ok_and(|guard| {
+            matches!(
+                &*guard,
+                SignInState::ProviderSetup(state)
+                    if !matches!(
+                        state.field,
+                        ProviderSetupField::Confirm | ProviderSetupField::WireApi
+                    ) && !state.is_saving
+            )
+        })
+    }
+
+    /// Returns whether the custom-provider setup field currently contains text.
+    pub(crate) fn provider_setup_has_text(&self) -> bool {
+        self.sign_in_state.read().is_ok_and(|guard| {
+            matches!(
+                &*guard,
+                SignInState::ProviderSetup(state) if !state.input.is_empty()
+            )
+        })
     }
 
     fn confirm_binding(&self) -> KeyBinding {
@@ -832,10 +855,10 @@ impl AuthModeWidget {
     fn render_provider_setup(&self, area: Rect, buf: &mut Buffer, state: &ProviderSetupState) {
         let [intro_area, input_area, footer_area] = Layout::vertical([
             Constraint::Min(8),
-            Constraint::Length(if state.field == ProviderSetupField::Confirm {
-                0
-            } else {
-                3
+            Constraint::Length(match state.field {
+                ProviderSetupField::Confirm => 0,
+                ProviderSetupField::WireApi => 5,
+                _ => 3,
             }),
             Constraint::Min(4),
         ])
@@ -878,25 +901,44 @@ impl AuthModeWidget {
             .wrap(Wrap { trim: false })
             .render(intro_area, buf);
 
-        if state.field != ProviderSetupField::Confirm {
-            let content_line: Line = if state.input.is_empty() {
-                provider_setup_placeholder(state.field).dim().into()
-            } else {
-                Line::from(state.input.clone())
-            };
-            Paragraph::new(content_line)
-                .wrap(Wrap { trim: false })
-                .block(
-                    Block::default()
-                        .title(provider_setup_field_title(state.field))
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(Color::Cyan)),
-                )
-                .render(input_area, buf);
+        match state.field {
+            ProviderSetupField::Confirm => {}
+            ProviderSetupField::WireApi => {
+                Paragraph::new(provider_setup_wire_api_lines(state.wire_api))
+                    .wrap(Wrap { trim: false })
+                    .block(
+                        Block::default()
+                            .title(provider_setup_field_title(state.field))
+                            .borders(Borders::ALL)
+                            .border_type(BorderType::Rounded)
+                            .border_style(Style::default().fg(Color::Cyan)),
+                    )
+                    .render(input_area, buf);
+            }
+            _ => {
+                let content_line: Line = if state.input.is_empty() {
+                    provider_setup_placeholder(state.field).dim().into()
+                } else {
+                    Line::from(state.input.clone())
+                };
+                Paragraph::new(content_line)
+                    .wrap(Wrap { trim: false })
+                    .block(
+                        Block::default()
+                            .title(provider_setup_field_title(state.field))
+                            .borders(Borders::ALL)
+                            .border_type(BorderType::Rounded)
+                            .border_style(Style::default().fg(Color::Cyan)),
+                    )
+                    .render(input_area, buf);
+            }
         }
 
-        let mut footer_lines: Vec<Line> = vec![
+        let mut footer_lines: Vec<Line> = Vec::new();
+        if state.field == ProviderSetupField::WireApi {
+            footer_lines.push("  Use ↑/↓ or 1/2 to choose the wire API".dim().into());
+        }
+        footer_lines.extend([
             Line::from(vec![
                 "  Press ".dim(),
                 self.confirm_binding().into(),
@@ -911,7 +953,7 @@ impl AuthModeWidget {
                 self.cancel_binding().into(),
                 " to cancel".dim(),
             ]),
-        ];
+        ]);
         if let Some(error) = self.error_message() {
             footer_lines.push("".into());
             footer_lines.push(error.red().into());
@@ -1121,7 +1163,29 @@ impl AuthModeWidget {
                 return true;
             }
 
-            if keys::CANCEL.is_pressed(*key_event) {
+            if state.field == ProviderSetupField::WireApi {
+                if keys::MOVE_UP.is_pressed(*key_event) || keys::SELECT_FIRST.is_pressed(*key_event)
+                {
+                    state.wire_api = WireApi::Chat;
+                    self.set_error(/*message*/ None);
+                    should_request_frame = true;
+                } else if keys::MOVE_DOWN.is_pressed(*key_event)
+                    || keys::SELECT_SECOND.is_pressed(*key_event)
+                {
+                    state.wire_api = WireApi::Responses;
+                    self.set_error(/*message*/ None);
+                    should_request_frame = true;
+                } else if keys::CONFIRM.is_pressed(*key_event) {
+                    state.start_field(ProviderSetupField::Model);
+                    self.set_error(/*message*/ None);
+                    should_request_frame = true;
+                } else if keys::CANCEL.is_pressed(*key_event) {
+                    *guard = SignInState::PickMode;
+                    self.set_error(/*message*/ None);
+                    self.highlighted_mode = SignInOption::CustomProvider;
+                    should_request_frame = true;
+                }
+            } else if keys::CANCEL.is_pressed(*key_event) {
                 *guard = SignInState::PickMode;
                 self.set_error(/*message*/ None);
                 self.highlighted_mode = SignInOption::CustomProvider;
@@ -1153,7 +1217,12 @@ impl AuthModeWidget {
             } else {
                 match key_event.code {
                     KeyCode::Backspace => {
-                        state.input.pop();
+                        if state.input_is_prefill {
+                            state.input.clear();
+                            state.input_is_prefill = false;
+                        } else {
+                            state.input.pop();
+                        }
                         self.set_error(/*message*/ None);
                         should_request_frame = true;
                     }
@@ -1162,8 +1231,15 @@ impl AuthModeWidget {
                             && !key_event.modifiers.contains(KeyModifiers::SUPER)
                             && !key_event.modifiers.contains(KeyModifiers::CONTROL)
                             && !key_event.modifiers.contains(KeyModifiers::ALT)
-                            && state.field != ProviderSetupField::Confirm =>
+                            && !matches!(
+                                state.field,
+                                ProviderSetupField::Confirm | ProviderSetupField::WireApi
+                            ) =>
                     {
+                        if state.input_is_prefill {
+                            state.input.clear();
+                            state.input_is_prefill = false;
+                        }
                         state.input.push(c);
                         self.set_error(/*message*/ None);
                         should_request_frame = true;
@@ -1194,8 +1270,16 @@ impl AuthModeWidget {
         let SignInState::ProviderSetup(state) = &mut *guard else {
             return false;
         };
-        if state.field == ProviderSetupField::Confirm || state.is_saving {
+        if matches!(
+            state.field,
+            ProviderSetupField::Confirm | ProviderSetupField::WireApi
+        ) || state.is_saving
+        {
             return true;
+        }
+        if state.input_is_prefill {
+            state.input.clear();
+            state.input_is_prefill = false;
         }
         state.input.push_str(pasted);
         drop(guard);
@@ -1228,10 +1312,7 @@ impl AuthModeWidget {
             edits.push(config_update::build_model_provider_selection_edit(
                 &state.id,
             ));
-            edits.extend(config_update::build_model_selection_edits(
-                &state.model,
-                Option::<String>::None,
-            ));
+            edits.push(config_update::build_model_selection_edit(&state.model));
 
             match config_update::write_config_batch(request_handle, edits).await {
                 Ok(_) => {
@@ -1419,6 +1500,36 @@ impl WidgetRef for AuthModeWidget {
             }
         }
     }
+}
+
+fn provider_setup_wire_api_lines(selected: WireApi) -> Vec<Line<'static>> {
+    [
+        (
+            WireApi::Chat,
+            "Chat Completions",
+            "OpenAI-compatible /v1/chat/completions",
+        ),
+        (WireApi::Responses, "Responses", "OpenAI /v1/responses"),
+    ]
+    .into_iter()
+    .map(|(wire_api, label, description)| {
+        if wire_api == selected {
+            Line::from(vec![
+                "  › ".cyan(),
+                label.cyan().bold(),
+                " — ".dim(),
+                description.cyan(),
+            ])
+        } else {
+            Line::from(vec![
+                "    ".into(),
+                label.into(),
+                " — ".dim(),
+                description.dim(),
+            ])
+        }
+    })
+    .collect()
 }
 
 fn provider_setup_field_title(field: ProviderSetupField) -> &'static str {

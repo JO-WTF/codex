@@ -81,8 +81,10 @@ impl OpenAiModelsEndpoint {
             auth_header_name: auth_telemetry.name,
             auth_env: self.auth_env(),
         });
+        let use_openai_models_format = self.provider_info.is_chat_wire_api();
         let client = ModelsClient::new(transport, api_provider, api_auth)
-            .with_telemetry(Some(request_telemetry));
+            .with_telemetry(Some(request_telemetry))
+            .with_openai_models_format(use_openai_models_format);
 
         timeout(
             MODELS_REFRESH_TIMEOUT,
@@ -109,6 +111,10 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
 
     fn supports_remote_model_refresh(&self) -> bool {
         !self.provider_info.requires_openai_auth || self.provider_info.has_command_auth()
+    }
+
+    fn remote_models_are_authoritative(&self) -> bool {
+        !self.provider_info.requires_openai_auth
     }
 
     fn uses_codex_backend(&self) -> ModelsEndpointFuture<'_, bool> {

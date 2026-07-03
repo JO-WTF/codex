@@ -14,6 +14,16 @@ use std::sync::Arc;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
 
+enum ModelCatalogRefresh<'a> {
+    CurrentProvider {
+        app_server: &'a mut AppServerSession,
+    },
+    FetchAndPersistProvider {
+        app_server: &'a mut AppServerSession,
+        provider_id: &'a str,
+    },
+}
+
 impl App {
     pub(super) async fn handle_event(
         &mut self,
@@ -2423,7 +2433,13 @@ impl App {
         action: crate::app_event::ProviderConfigAction,
     ) {
         let builtin_ids = codex_model_provider_info::built_in_model_providers(None);
-        let (edits, success_message, refresh_models) = match action {
+        enum ProviderPostSaveAction {
+            None,
+            RefreshCurrentProvider,
+            FetchAndOpenModels { provider_id: String },
+        }
+
+        let (edits, success_message, post_save_action) = match action {
             crate::app_event::ProviderConfigAction::Upsert { id, provider } => {
                 if builtin_ids.contains_key(&id) {
                     self.chat_widget.add_error_message(format!(
@@ -2440,12 +2456,26 @@ impl App {
                         return;
                     }
                 };
-                let refresh_models = self.config.model_provider_id == id;
-                (
-                    vec![edit],
-                    format!("Saved provider '{id}'."),
-                    refresh_models,
-                )
+                let provider_is_new = !self.config.model_providers.contains_key(&id);
+                let mut edits = vec![edit];
+                let post_save_action = if provider_is_new {
+                    edits.push(crate::config_update::build_model_provider_selection_edit(
+                        &id,
+                    ));
+                    ProviderPostSaveAction::FetchAndOpenModels {
+                        provider_id: id.clone(),
+                    }
+                } else if self.config.model_provider_id == id {
+                    ProviderPostSaveAction::RefreshCurrentProvider
+                } else {
+                    ProviderPostSaveAction::None
+                };
+                let success_message = if provider_is_new {
+                    format!("Saved and selected provider '{id}'.")
+                } else {
+                    format!("Saved provider '{id}'.")
+                };
+                (edits, success_message, post_save_action)
             }
             crate::app_event::ProviderConfigAction::Delete { id } => {
                 if builtin_ids.contains_key(&id) {
@@ -2467,7 +2497,7 @@ impl App {
                 (
                     vec![crate::config_update::build_model_provider_delete_edit(&id)],
                     format!("Deleted provider '{id}'."),
-                    false,
+                    ProviderPostSaveAction::None,
                 )
             }
             crate::app_event::ProviderConfigAction::Use { id } => {
@@ -2481,7 +2511,27 @@ impl App {
                         &id,
                     )],
                     format!("Selected provider '{id}' for new sessions."),
-                    true,
+                    ProviderPostSaveAction::RefreshCurrentProvider,
+                )
+            }
+            crate::app_event::ProviderConfigAction::FetchModels { id } => {
+                if builtin_ids.contains_key(&id) {
+                    self.chat_widget.add_error_message(format!(
+                        "Built-in provider '{id}' uses Codex's built-in model catalog."
+                    ));
+                    return;
+                }
+                if !self.config.model_providers.contains_key(&id) {
+                    self.chat_widget
+                        .add_error_message(format!("Provider '{id}' does not exist."));
+                    return;
+                }
+                (
+                    vec![crate::config_update::build_model_provider_selection_edit(
+                        &id,
+                    )],
+                    format!("Fetching models for provider '{id}'."),
+                    ProviderPostSaveAction::FetchAndOpenModels { provider_id: id },
                 )
             }
         };
@@ -2491,10 +2541,33 @@ impl App {
                 self.refresh_in_memory_config_from_disk_best_effort("updating providers")
                     .await;
                 self.chat_widget.add_info_message(success_message, None);
-                if refresh_models {
-                    self.refresh_model_catalog_from_app_server(app_server).await;
+                let open_model_popup = matches!(
+                    post_save_action,
+                    ProviderPostSaveAction::FetchAndOpenModels { .. }
+                );
+                let refresh_succeeded = match post_save_action {
+                    ProviderPostSaveAction::None => false,
+                    ProviderPostSaveAction::RefreshCurrentProvider => {
+                        self.refresh_model_catalog_from_app_server(
+                            ModelCatalogRefresh::CurrentProvider { app_server },
+                        )
+                        .await
+                    }
+                    ProviderPostSaveAction::FetchAndOpenModels { provider_id } => {
+                        self.refresh_model_catalog_from_app_server(
+                            ModelCatalogRefresh::FetchAndPersistProvider {
+                                app_server,
+                                provider_id: provider_id.as_str(),
+                            },
+                        )
+                        .await
+                    }
+                };
+                if open_model_popup && refresh_succeeded {
+                    self.chat_widget.open_model_popup();
+                } else {
+                    self.chat_widget.open_provider_manager();
                 }
-                self.chat_widget.open_provider_manager();
             }
             Err(err) => {
                 let error = crate::config_update::format_config_error(&err);
@@ -2504,10 +2577,51 @@ impl App {
         }
     }
 
-    async fn refresh_model_catalog_from_app_server(&mut self, app_server: &mut AppServerSession) {
-        match app_server.fetch_available_models().await {
+    async fn refresh_model_catalog_from_app_server(
+        &mut self,
+        refresh: ModelCatalogRefresh<'_>,
+    ) -> bool {
+        let (app_server, persist_provider_id, fetch_result) = match refresh {
+            ModelCatalogRefresh::CurrentProvider { app_server } => {
+                let fetch_result = app_server.fetch_available_models().await;
+                (app_server, None, fetch_result)
+            }
+            ModelCatalogRefresh::FetchAndPersistProvider {
+                app_server,
+                provider_id,
+            } => {
+                let fetch_result = app_server.force_fetch_available_models().await;
+                (app_server, Some(provider_id), fetch_result)
+            }
+        };
+
+        match fetch_result {
             Ok(available_models) => {
                 let model_count = available_models.len();
+                if let Some(provider_id) = persist_provider_id {
+                    let provider_models = available_models
+                        .iter()
+                        .map(codex_model_provider_info::ProviderModelInfo::from)
+                        .collect::<Vec<_>>();
+                    let edit = crate::config_update::build_model_provider_models_edit(
+                        provider_id,
+                        &provider_models,
+                    );
+                    if let Err(err) = crate::config_update::write_config_batch(
+                        app_server.request_handle(),
+                        vec![edit],
+                    )
+                    .await
+                    {
+                        let error = crate::config_update::format_config_error(&err);
+                        self.chat_widget.add_error_message(format!(
+                            "Fetched models, but failed to save provider models: {error}"
+                        ));
+                        return false;
+                    }
+                    self.refresh_in_memory_config_from_disk_best_effort("saving provider models")
+                        .await;
+                }
                 let model_catalog = Arc::new(ModelCatalog::new(available_models));
                 self.model_catalog = model_catalog.clone();
                 self.chat_widget.set_model_catalog(model_catalog);
@@ -2518,11 +2632,13 @@ impl App {
                     ),
                     None,
                 );
+                true
             }
             Err(err) => {
                 self.chat_widget.add_error_message(format!(
                     "Provider saved, but failed to refresh models: {err:#}"
                 ));
+                false
             }
         }
     }

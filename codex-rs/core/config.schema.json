@@ -1620,6 +1620,13 @@
           "description": "Friendly display name.",
           "type": "string"
         },
+        "models": {
+          "description": "Custom-provider models fetched from that provider and cached in config.toml.",
+          "items": {
+            "$ref": "#/definitions/ProviderModelInfo"
+          },
+          "type": "array"
+        },
         "query_params": {
           "additionalProperties": {
             "type": "string"
@@ -2632,6 +2639,33 @@
         "transcription"
       ],
       "type": "string"
+    },
+    "ProviderModelInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "max_output_tokens": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "max_token_len": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "model_name": {
+          "type": "string"
+        },
+        "show_in_picker": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model_id"
+      ],
+      "type": "object"
     },
     "ReasoningEffort": {
       "description": "A non-empty reasoning effort value advertised by the model.",

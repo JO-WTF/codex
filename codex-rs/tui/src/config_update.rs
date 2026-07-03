@@ -18,11 +18,13 @@ use codex_app_server_protocol::SkillsConfigWriteResponse;
 use codex_config::loader::project_trust_key;
 use codex_features::FEATURES;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::ProviderModelInfo;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::TrustLevel;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::WrapErr;
+use serde_json::Map as JsonMap;
 use serde_json::Value as JsonValue;
 use std::fmt::Display;
 use std::path::Path;
@@ -63,6 +65,10 @@ fn trusted_project_edit(project_path: &Path) -> ConfigEdit {
     )
 }
 
+pub(crate) fn build_model_selection_edit(model: &str) -> ConfigEdit {
+    replace_config_value("model", serde_json::json!(model))
+}
+
 pub(crate) fn build_model_selection_edits(
     model: &str,
     effort: Option<impl ToString>,
@@ -76,10 +82,7 @@ pub(crate) fn build_model_selection_edits(
             )
         },
     );
-    vec![
-        replace_config_value("model", serde_json::json!(model)),
-        effort_edit,
-    ]
+    vec![build_model_selection_edit(model), effort_edit]
 }
 
 pub(crate) fn build_service_tier_selection_edits(service_tier: Option<&str>) -> Vec<ConfigEdit> {
@@ -153,11 +156,47 @@ pub(crate) fn build_model_provider_edit(
     provider_id: &str,
     provider: &ModelProviderInfo,
 ) -> Result<ConfigEdit> {
-    let provider_value = serde_json::to_value(provider).wrap_err("serialize model provider")?;
+    let mut provider_value = serde_json::to_value(provider).wrap_err("serialize model provider")?;
+    strip_json_null_values(&mut provider_value);
     Ok(replace_config_value(
         format!("model_providers.{}", quoted_key_path_segment(provider_id)),
         provider_value,
     ))
+}
+
+fn strip_json_null_values(value: &mut JsonValue) {
+    match value {
+        JsonValue::Object(object) => {
+            let mut stripped = JsonMap::new();
+            for (key, mut value) in std::mem::take(object) {
+                strip_json_null_values(&mut value);
+                if !value.is_null() {
+                    stripped.insert(key, value);
+                }
+            }
+            *object = stripped;
+        }
+        JsonValue::Array(values) => {
+            for value in values.iter_mut() {
+                strip_json_null_values(value);
+            }
+            values.retain(|value| !value.is_null());
+        }
+        JsonValue::Null | JsonValue::Bool(_) | JsonValue::Number(_) | JsonValue::String(_) => {}
+    }
+}
+
+pub(crate) fn build_model_provider_models_edit(
+    provider_id: &str,
+    models: &[ProviderModelInfo],
+) -> ConfigEdit {
+    replace_config_value(
+        format!(
+            "model_providers.{}.models",
+            quoted_key_path_segment(provider_id)
+        ),
+        serde_json::json!(models),
+    )
 }
 
 pub(crate) fn build_model_provider_delete_edit(provider_id: &str) -> ConfigEdit {

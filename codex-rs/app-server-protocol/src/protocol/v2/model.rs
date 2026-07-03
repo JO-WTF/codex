@@ -50,6 +50,9 @@ pub struct ModelListParams {
     /// When true, include models that are hidden from the default picker list.
     #[ts(optional = nullable)]
     pub include_hidden: Option<bool>,
+    /// When true, bypass provider-cached models and fetch from the provider endpoint.
+    #[ts(optional = nullable)]
+    pub force_refresh: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

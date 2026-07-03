@@ -15,6 +15,13 @@
         "null"
       ]
     },
+    "forceRefresh": {
+      "description": "When true, bypass provider-cached models and fetch from the provider endpoint.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "limit": {
       "description": "Optional page size; defaults to a reasonable server-side value.",
       "format": "uint32",

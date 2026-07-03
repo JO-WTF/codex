@@ -165,6 +165,7 @@ async fn list_models_returns_all_models_with_large_limit() -> Result<()> {
             limit: Some(100),
             cursor: None,
             include_hidden: None,
+            force_refresh: None,
         })
         .await?;
 
@@ -229,6 +230,7 @@ wire_api = "chat"
             limit: Some(100),
             cursor: None,
             include_hidden: Some(true),
+            force_refresh: None,
         })
         .await?;
 
@@ -259,6 +261,7 @@ async fn list_models_includes_hidden_models() -> Result<()> {
             limit: Some(100),
             cursor: None,
             include_hidden: Some(true),
+            force_refresh: None,
         })
         .await?;
 
@@ -345,6 +348,7 @@ openai_base_url = "{server_uri}/v1"
             limit: Some(100),
             cursor: None,
             include_hidden: None,
+            force_refresh: None,
         })
         .await?;
 
@@ -407,6 +411,7 @@ async fn list_models_pagination_works() -> Result<()> {
                 limit: Some(1),
                 cursor: cursor.clone(),
                 include_hidden: None,
+                force_refresh: None,
             })
             .await?;
 
@@ -451,6 +456,7 @@ async fn list_models_rejects_invalid_cursor() -> Result<()> {
             limit: None,
             cursor: Some("invalid".to_string()),
             include_hidden: None,
+            force_refresh: None,
         })
         .await?;
 

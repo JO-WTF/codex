@@ -665,7 +665,6 @@ fn provider_form_draft(id: &str, provider: &ModelProviderInfo) -> ProviderFormDr
             .unwrap_or_else(|| "https://api.example.com/v1".to_string()),
         env_key: provider.env_key.clone().unwrap_or_else(|| "-".to_string()),
         wire_api: provider.wire_api,
-        models: Vec::new(),
     }
 }
 

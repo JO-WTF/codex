@@ -439,6 +439,7 @@ impl ModelProviderInfo {
                 region: None,
             })),
             wire_api: WireApi::Responses,
+            models: Vec::new(),
             query_params: None,
             http_headers: Some(HashMap::from([(
                 AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_HEADER.to_string(),
@@ -468,6 +469,15 @@ impl ModelProviderInfo {
 
     pub fn has_command_auth(&self) -> bool {
         self.auth.is_some()
+    }
+
+    /// Returns whether this provider uses the Chat wire protocol (`/v1/chat/completions`).
+    ///
+    /// Chat-protocol providers typically expose the standard OpenAI `/v1/models`
+    /// endpoint with `{"data": [...]}` format, while Responses-protocol providers
+    /// use the Codex-native `{"models": [...]}` format.
+    pub fn is_chat_wire_api(&self) -> bool {
+        self.wire_api == WireApi::Chat
     }
 }
 
@@ -573,6 +583,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         auth: None,
         aws: None,
         wire_api,
+        models: Vec::new(),
         query_params: None,
         http_headers: None,
         env_http_headers: None,

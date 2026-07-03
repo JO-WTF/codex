@@ -166,7 +166,6 @@ fn model_provider_from_proto(
         Err(_) => {
             return Err(parse_error(format!(
                 "remote thread config returned unknown wire_api: {}",
-                models: Vec::new(),
                 provider.wire_api
             )));
         }

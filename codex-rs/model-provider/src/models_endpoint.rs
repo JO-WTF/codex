@@ -81,8 +81,10 @@ impl OpenAiModelsEndpoint {
             auth_header_name: auth_telemetry.name,
             auth_env: self.auth_env(),
         });
+        let use_openai_models_format = self.provider_info.is_chat_wire_api();
         let client = ModelsClient::new(transport, api_provider, api_auth)
-            .with_telemetry(Some(request_telemetry));
+            .with_telemetry(Some(request_telemetry))
+            .with_openai_models_format(use_openai_models_format);
 
         timeout(
             MODELS_REFRESH_TIMEOUT,

@@ -40,6 +40,7 @@ impl ChatWidget {
                             name: "My Provider".to_string(),
                             base_url: "https://api.example.com/v1".to_string(),
                             env_key: "MY_PROVIDER_API_KEY".to_string(),
+                            context_window: 262_144,
                             wire_api: WireApi::Chat,
                         },
                     });
@@ -294,6 +295,9 @@ impl ChatWidget {
             ProviderFormField::Id => draft.id = value,
             ProviderFormField::Name => draft.name = value,
             ProviderFormField::BaseUrl => draft.base_url = value,
+            ProviderFormField::ContextWindow => {
+                draft.context_window = value.parse::<i64>().unwrap_or(262_144);
+            }
             ProviderFormField::EnvKey => draft.env_key = value,
         }
 
@@ -465,6 +469,7 @@ impl ChatWidget {
         provider.base_url = Some(draft.base_url.trim().to_string());
         provider.env_key = (draft.env_key.trim() != "-").then(|| draft.env_key.trim().to_string());
         provider.wire_api = draft.wire_api;
+        provider.context_window = Some(draft.context_window);
         provider
     }
 
@@ -634,7 +639,10 @@ fn provider_description(provider: &ModelProviderInfo, is_builtin: bool) -> Strin
     let source = if is_builtin { "built-in" } else { "custom" };
     let base_url = provider.base_url.as_deref().unwrap_or("no base_url");
     let env_key = provider.env_key.as_deref().unwrap_or("no env_key");
-    format!("{source} - {} - {base_url} - {env_key}", provider.wire_api)
+    let context = provider
+        .context_window
+        .map_or(String::new(), |w| format!(" {w} ctx"));
+    format!("{source} - {} - {base_url} - {env_key}{context}", provider.wire_api)
 }
 
 fn providers_header(title: &str, subtitle: &str) -> Box<dyn Renderable> {
@@ -664,6 +672,7 @@ fn provider_form_draft(id: &str, provider: &ModelProviderInfo) -> ProviderFormDr
             .clone()
             .unwrap_or_else(|| "https://api.example.com/v1".to_string()),
         env_key: provider.env_key.clone().unwrap_or_else(|| "-".to_string()),
+        context_window: provider.context_window.unwrap_or(262_144),
         wire_api: provider.wire_api,
     }
 }
@@ -681,6 +690,7 @@ fn provider_form_field_title(mode: ProviderFormMode, field: ProviderFormField) -
         ProviderFormField::Id => "Provider id",
         ProviderFormField::Name => "Display name",
         ProviderFormField::BaseUrl => "Base URL",
+        ProviderFormField::ContextWindow => "Context window",
         ProviderFormField::EnvKey => "API key env var",
     };
     format!("{form_title}: {field_title}")
@@ -691,6 +701,7 @@ fn provider_form_field_placeholder(field: ProviderFormField) -> String {
         ProviderFormField::Id => "provider-id".to_string(),
         ProviderFormField::Name => "My Provider".to_string(),
         ProviderFormField::BaseUrl => "https://api.example.com/v1".to_string(),
+        ProviderFormField::ContextWindow => "262144".to_string(),
         ProviderFormField::EnvKey => "ENV_VAR_NAME or - for no env var".to_string(),
     }
 }
@@ -700,6 +711,7 @@ fn provider_form_field_value(draft: &ProviderFormDraft, field: ProviderFormField
         ProviderFormField::Id => draft.id.clone(),
         ProviderFormField::Name => draft.name.clone(),
         ProviderFormField::BaseUrl => draft.base_url.clone(),
+        ProviderFormField::ContextWindow => draft.context_window.to_string(),
         ProviderFormField::EnvKey => draft.env_key.clone(),
     }
 }
@@ -719,6 +731,9 @@ fn provider_form_context_label(
         (_, ProviderFormField::BaseUrl) => {
             "Include /v1 when the provider expects OpenAI-compatible paths".to_string()
         }
+        (_, ProviderFormField::ContextWindow) => {
+            format!("Current: {}. Default: 262144.", draft.context_window)
+        }
         _ => "Press Enter to continue, Esc to cancel".to_string(),
     }
 }
@@ -730,7 +745,8 @@ fn next_provider_form_field(
     match (mode, field) {
         (ProviderFormMode::Add, ProviderFormField::Id) => Some(ProviderFormField::Name),
         (_, ProviderFormField::Name) => Some(ProviderFormField::BaseUrl),
-        (_, ProviderFormField::BaseUrl) => Some(ProviderFormField::EnvKey),
+        (_, ProviderFormField::BaseUrl) => Some(ProviderFormField::ContextWindow),
+        (_, ProviderFormField::ContextWindow) => Some(ProviderFormField::EnvKey),
         (_, ProviderFormField::EnvKey) => None,
         (ProviderFormMode::Edit, ProviderFormField::Id) => Some(ProviderFormField::Name),
     }
@@ -768,6 +784,10 @@ fn provider_form_confirm_header(draft: &ProviderFormDraft) -> Box<dyn Renderable
     header.push(Line::from(vec![
         "base_url: ".dim(),
         draft.base_url.clone().into(),
+    ]));
+    header.push(Line::from(vec![
+        "context_window: ".dim(),
+        draft.context_window.to_string().into(),
     ]));
     header.push(Line::from(vec![
         "env_key: ".dim(),

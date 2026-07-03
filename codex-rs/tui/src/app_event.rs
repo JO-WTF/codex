@@ -171,6 +171,7 @@ pub(crate) enum ProviderFormField {
     Id,
     Name,
     BaseUrl,
+    ContextWindow,
     EnvKey,
 }
 
@@ -180,6 +181,7 @@ pub(crate) struct ProviderFormDraft {
     pub(crate) name: String,
     pub(crate) base_url: String,
     pub(crate) env_key: String,
+    pub(crate) context_window: i64,
     pub(crate) wire_api: WireApi,
 }
 

@@ -1520,12 +1520,6 @@ impl App {
                             .map(std::string::ToString::to_string)
                             .unwrap_or_else(|| "default".to_string());
                         tracing::info!("Selected model: {model}, Selected effort: {effort_label}");
-                        let mut message = format!("Model changed to {model}");
-                        if let Some(label) = Self::reasoning_label_for(&model, effort.as_ref()) {
-                            message.push(' ');
-                            message.push_str(&label);
-                        }
-                        self.chat_widget.add_info_message(message, /*hint*/ None);
                     }
                     Err(err) => {
                         let error = format_config_error(&err);
@@ -2471,7 +2465,8 @@ impl App {
                     ProviderPostSaveAction::None
                 };
                 let success_message = if provider_is_new {
-                    format!("Saved and selected provider '{id}'.")
+                    tracing::info!("Saved and selected provider '{id}'.");
+                    "Provider added.".to_string()
                 } else {
                     format!("Saved provider '{id}'.")
                 };
@@ -2496,7 +2491,7 @@ impl App {
                 }
                 (
                     vec![crate::config_update::build_model_provider_delete_edit(&id)],
-                    format!("Deleted provider '{id}'."),
+                    String::new(),
                     ProviderPostSaveAction::None,
                 )
             }
@@ -2510,7 +2505,7 @@ impl App {
                     vec![crate::config_update::build_model_provider_selection_edit(
                         &id,
                     )],
-                    format!("Selected provider '{id}' for new sessions."),
+                    String::new(),
                     ProviderPostSaveAction::RefreshCurrentProvider,
                 )
             }
@@ -2530,7 +2525,7 @@ impl App {
                     vec![crate::config_update::build_model_provider_selection_edit(
                         &id,
                     )],
-                    format!("Fetching models for provider '{id}'."),
+                    String::new(),
                     ProviderPostSaveAction::FetchAndOpenModels { provider_id: id },
                 )
             }
@@ -2540,7 +2535,9 @@ impl App {
             Ok(_) => {
                 self.refresh_in_memory_config_from_disk_best_effort("updating providers")
                     .await;
-                self.chat_widget.add_info_message(success_message, None);
+                if !success_message.is_empty() {
+                    self.chat_widget.add_info_message(success_message, None);
+                }
                 let open_model_popup = matches!(
                     post_save_action,
                     ProviderPostSaveAction::FetchAndOpenModels { .. }
@@ -2599,10 +2596,21 @@ impl App {
             Ok(available_models) => {
                 let model_count = available_models.len();
                 if let Some(provider_id) = persist_provider_id {
-                    let provider_models = available_models
+                    let provider_context_window = self
+                        .config
+                        .model_providers
+                        .get(provider_id)
+                        .and_then(|p| p.context_window);
+                    let provider_models: Vec<_> = available_models
                         .iter()
-                        .map(codex_model_provider_info::ProviderModelInfo::from)
-                        .collect::<Vec<_>>();
+                        .map(|m| {
+                            let mut info = codex_model_provider_info::ProviderModelInfo::from(m);
+                            if info.context_window.is_none() {
+                                info.context_window = provider_context_window;
+                            }
+                            info
+                        })
+                        .collect();
                     let edit = crate::config_update::build_model_provider_models_edit(
                         provider_id,
                         &provider_models,
@@ -2625,12 +2633,9 @@ impl App {
                 let model_catalog = Arc::new(ModelCatalog::new(available_models));
                 self.model_catalog = model_catalog.clone();
                 self.chat_widget.set_model_catalog(model_catalog);
-                self.chat_widget.add_info_message(
-                    format!(
-                        "Loaded {model_count} models for provider '{}'.",
-                        self.config.model_provider_id
-                    ),
-                    None,
+                tracing::info!(
+                    "Loaded {model_count} models for provider '{}'.",
+                    self.config.model_provider_id
                 );
                 true
             }

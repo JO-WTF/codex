@@ -14,6 +14,8 @@ use codex_protocol::error::CodexErr;
 use codex_protocol::error::EnvVarError;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::openai_models::ModelPreset;
+use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::openai_models::ReasoningEffortPreset;
 use http::HeaderMap;
 use http::header::HeaderName;
 use http::header::HeaderValue;
@@ -123,6 +125,16 @@ pub struct ProviderModelInfo {
     /// Whether this model should be displayed in the model picker.
     #[serde(default = "default_provider_model_show_in_picker")]
     pub show_in_picker: bool,
+    /// Context window length for this model. When unset, falls back to
+    /// `max_token_len` or 128K at conversion time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<i64>,
+    /// Default reasoning effort level for this model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_reasoning_level: Option<ReasoningEffort>,
+    /// Supported reasoning effort levels with descriptions.
+    #[serde(default)]
+    pub supported_reasoning_levels: Vec<ReasoningEffortPreset>,
 }
 
 fn default_provider_model_show_in_picker() -> bool {
@@ -137,6 +149,9 @@ impl From<&ModelPreset> for ProviderModelInfo {
             max_token_len: None,
             max_output_tokens: None,
             show_in_picker: model.show_in_picker,
+            context_window: None,
+            default_reasoning_level: Some(model.default_reasoning_effort.clone()),
+            supported_reasoning_levels: model.supported_reasoning_efforts.clone(),
         }
     }
 }
@@ -199,6 +214,10 @@ pub struct ModelProviderInfo {
     /// Whether this provider supports the Responses API WebSocket transport.
     #[serde(default)]
     pub supports_websockets: bool,
+    /// Default context window size for all models from this provider, in tokens.
+    /// Individual model entries can override this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<i64>,
 }
 
 /// AWS SigV4 auth configuration for a model provider.
@@ -421,6 +440,7 @@ impl ModelProviderInfo {
             websocket_connect_timeout_ms: None,
             requires_openai_auth: true,
             supports_websockets: true,
+            context_window: None,
         }
     }
 
@@ -452,6 +472,7 @@ impl ModelProviderInfo {
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
+            context_window: None,
         }
     }
 
@@ -593,6 +614,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
+        context_window: None,
     }
 }
 

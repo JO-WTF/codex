@@ -182,6 +182,7 @@ fn model_provider_from_proto(
             .transpose()?,
         aws: None,
         wire_api,
+        context_window: None,
         query_params: provider.query_params.map(|map| map.values),
         http_headers: provider.http_headers.map(|map| map.values),
         env_http_headers: provider.env_http_headers.map(|map| map.values),
@@ -211,6 +212,7 @@ fn model_provider_to_proto(
         aws: _,
         wire_api,
         models: _,
+        context_window: _,
         query_params,
         http_headers,
         env_http_headers,
@@ -538,6 +540,7 @@ mod tests {
                 cwd: workspace_dir(),
             }),
             wire_api: WireApi::Responses,
+            context_window: None,
             models: Vec::new(),
             query_params: Some(HashMap::from([(
                 "api-version".to_string(),

@@ -185,20 +185,35 @@ impl ChatWidget {
                 (!preset.description.is_empty()).then_some(preset.description.to_string());
             let is_current = preset.model.as_str() == self.current_model();
             let single_supported_effort = preset.supported_reasoning_efforts.len() == 1;
+            let no_supported_effort = preset.supported_reasoning_efforts.is_empty();
             let preset_for_action = preset.clone();
-            let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
-                let preset_for_event = preset_for_action.clone();
-                tx.send(AppEvent::OpenReasoningPopup {
-                    model: preset_for_event,
-                });
-            })];
+            let actions: Vec<SelectionAction> = if no_supported_effort || single_supported_effort {
+                let model_for_action = preset.model.clone();
+                let effort_for_action = if no_supported_effort {
+                    None
+                } else {
+                    Some(preset.default_reasoning_effort.clone())
+                };
+                Self::model_selection_actions(
+                    model_for_action,
+                    effort_for_action,
+                    false,
+                )
+            } else {
+                vec![Box::new(move |tx| {
+                    let preset_for_event = preset_for_action.clone();
+                    tx.send(AppEvent::OpenReasoningPopup {
+                        model: preset_for_event,
+                    });
+                })]
+            };
             items.push(SelectionItem {
                 name: preset.model.clone(),
                 description,
                 is_current,
                 is_default: preset.is_default,
                 actions,
-                dismiss_on_select: single_supported_effort,
+                dismiss_on_select: no_supported_effort || single_supported_effort,
                 dismiss_parent_on_child_accept: !single_supported_effort,
                 ..Default::default()
             });

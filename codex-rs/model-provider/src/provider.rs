@@ -330,6 +330,7 @@ impl ModelProvider for ConfiguredModelProvider {
 
 fn provider_model_to_model_info(model: &ProviderModelInfo) -> ModelInfo {
     let max_token_len = model.max_token_len.unwrap_or(128_000);
+    let context_window = model.context_window.or(Some(max_token_len));
     ModelInfo {
         slug: model.model_id.clone(),
         display_name: model
@@ -337,8 +338,11 @@ fn provider_model_to_model_info(model: &ProviderModelInfo) -> ModelInfo {
             .clone()
             .unwrap_or_else(|| model.model_id.clone()),
         description: None,
-        default_reasoning_level: Some(ReasoningEffort::None),
-        supported_reasoning_levels: Vec::new(),
+        default_reasoning_level: model
+            .default_reasoning_level
+            .clone()
+            .or(Some(ReasoningEffort::None)),
+        supported_reasoning_levels: model.supported_reasoning_levels.clone(),
         shell_type: ConfigShellToolType::ShellCommand,
         visibility: if model.show_in_picker {
             ModelVisibility::List
@@ -363,8 +367,8 @@ fn provider_model_to_model_info(model: &ProviderModelInfo) -> ModelInfo {
         truncation_policy: TruncationPolicyConfig::tokens(max_token_len),
         supports_parallel_tool_calls: false,
         supports_image_detail_original: false,
-        context_window: Some(max_token_len),
-        max_context_window: Some(max_token_len),
+        context_window,
+        max_context_window: context_window,
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,

@@ -214,10 +214,6 @@ pub struct ModelProviderInfo {
     /// Whether this provider supports the Responses API WebSocket transport.
     #[serde(default)]
     pub supports_websockets: bool,
-    /// Default context window size for all models from this provider, in tokens.
-    /// Individual model entries can override this.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context_window: Option<i64>,
 }
 
 /// AWS SigV4 auth configuration for a model provider.
@@ -440,7 +436,6 @@ impl ModelProviderInfo {
             websocket_connect_timeout_ms: None,
             requires_openai_auth: true,
             supports_websockets: true,
-            context_window: None,
         }
     }
 
@@ -472,7 +467,6 @@ impl ModelProviderInfo {
             websocket_connect_timeout_ms: None,
             requires_openai_auth: false,
             supports_websockets: false,
-            context_window: None,
         }
     }
 
@@ -614,7 +608,6 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         websocket_connect_timeout_ms: None,
         requires_openai_auth: false,
         supports_websockets: false,
-        context_window: None,
     }
 }
 

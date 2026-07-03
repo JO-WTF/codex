@@ -2596,21 +2596,10 @@ impl App {
             Ok(available_models) => {
                 let model_count = available_models.len();
                 if let Some(provider_id) = persist_provider_id {
-                    let provider_context_window = self
-                        .config
-                        .model_providers
-                        .get(provider_id)
-                        .and_then(|p| p.context_window);
-                    let provider_models: Vec<_> = available_models
+                    let provider_models = available_models
                         .iter()
-                        .map(|m| {
-                            let mut info = codex_model_provider_info::ProviderModelInfo::from(m);
-                            if info.context_window.is_none() {
-                                info.context_window = provider_context_window;
-                            }
-                            info
-                        })
-                        .collect();
+                        .map(codex_model_provider_info::ProviderModelInfo::from)
+                        .collect::<Vec<_>>();
                     let edit = crate::config_update::build_model_provider_models_edit(
                         provider_id,
                         &provider_models,

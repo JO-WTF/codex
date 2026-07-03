@@ -212,6 +212,21 @@ pub(crate) enum TurnPermissionsOverride {
     LegacySandbox(PermissionProfile),
 }
 
+#[derive(Clone, Copy)]
+enum ModelListRefresh {
+    UseCachedProviderModels,
+    ForceProviderFetch,
+}
+
+impl ModelListRefresh {
+    fn force_refresh(self) -> Option<bool> {
+        match self {
+            Self::UseCachedProviderModels => None,
+            Self::ForceProviderFetch => Some(true),
+        }
+    }
+}
+
 impl AppServerSession {
     pub(crate) fn new(client: AppServerClient, thread_params_mode: ThreadParamsMode) -> Self {
         Self {
@@ -269,6 +284,7 @@ impl AppServerSession {
                     cursor: None,
                     limit: None,
                     include_hidden: Some(true),
+                    force_refresh: None,
                 },
             })
             .await
@@ -351,6 +367,19 @@ impl AppServerSession {
     }
 
     pub(crate) async fn fetch_available_models(&mut self) -> Result<Vec<ModelPreset>> {
+        self.fetch_available_models_for(ModelListRefresh::UseCachedProviderModels)
+            .await
+    }
+
+    pub(crate) async fn force_fetch_available_models(&mut self) -> Result<Vec<ModelPreset>> {
+        self.fetch_available_models_for(ModelListRefresh::ForceProviderFetch)
+            .await
+    }
+
+    async fn fetch_available_models_for(
+        &mut self,
+        refresh: ModelListRefresh,
+    ) -> Result<Vec<ModelPreset>> {
         let model_request_id = self.next_request_id();
         let models: ModelListResponse = self
             .client
@@ -360,6 +389,7 @@ impl AppServerSession {
                     cursor: None,
                     limit: None,
                     include_hidden: Some(true),
+                    force_refresh: refresh.force_refresh(),
                 },
             })
             .await

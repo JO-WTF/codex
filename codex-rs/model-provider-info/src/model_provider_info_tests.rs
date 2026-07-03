@@ -20,6 +20,7 @@ base_url = "http://localhost:11434/v1"
         auth: None,
         aws: None,
         wire_api: WireApi::Responses,
+        models: Vec::new(),
         query_params: None,
         http_headers: None,
         env_http_headers: None,
@@ -52,6 +53,7 @@ query_params = { api-version = "2025-04-01-preview" }
         auth: None,
         aws: None,
         wire_api: WireApi::Responses,
+        models: Vec::new(),
         query_params: Some(maplit::hashmap! {
             "api-version".to_string() => "2025-04-01-preview".to_string(),
         }),
@@ -87,6 +89,7 @@ env_http_headers = { "X-Example-Env-Header" = "EXAMPLE_ENV_VAR" }
         auth: None,
         aws: None,
         wire_api: WireApi::Responses,
+        models: Vec::new(),
         query_params: None,
         http_headers: Some(maplit::hashmap! {
             "X-Example-Header".to_string() => "example-value".to_string(),
@@ -161,6 +164,7 @@ fn test_supports_remote_compaction_for_azure_name() {
         auth: None,
         aws: None,
         wire_api: WireApi::Responses,
+        models: Vec::new(),
         query_params: None,
         http_headers: None,
         env_http_headers: None,
@@ -186,6 +190,7 @@ fn test_supports_remote_compaction_for_non_openai_non_azure_provider() {
         auth: None,
         aws: None,
         wire_api: WireApi::Responses,
+        models: Vec::new(),
         query_params: None,
         http_headers: None,
         env_http_headers: None,
@@ -266,6 +271,7 @@ fn test_create_amazon_bedrock_provider() {
                 region: None,
             }),
             wire_api: WireApi::Responses,
+            models: Vec::new(),
             query_params: None,
             http_headers: Some(maplit::hashmap! {
                 AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_HEADER.to_string() =>
@@ -398,6 +404,7 @@ fn test_merge_configured_model_providers_allows_amazon_bedrock_default_fields() 
                 region: None,
             }),
             wire_api: WireApi::Responses,
+            models: Vec::new(),
             ..ModelProviderInfo::default()
         },
     )]);
@@ -420,6 +427,7 @@ fn test_validate_provider_aws_rejects_conflicting_auth() {
         }),
         env_key: Some("AWS_BEARER_TOKEN_BEDROCK".to_string()),
         supports_websockets: false,
+        models: Vec::new(),
         ..ModelProviderInfo::create_openai_provider(/*base_url*/ None)
     };
 
@@ -438,6 +446,7 @@ fn test_validate_provider_aws_rejects_websockets() {
         }),
         requires_openai_auth: false,
         supports_websockets: true,
+        models: Vec::new(),
         ..ModelProviderInfo::create_openai_provider(/*base_url*/ None)
     };
 
@@ -466,4 +475,34 @@ refresh_interval_ms = 0
     let auth = provider.auth.expect("auth config should deserialize");
     assert_eq!(auth.refresh_interval_ms, 0);
     assert_eq!(auth.refresh_interval(), None);
+}
+
+#[test]
+fn test_deserialize_custom_provider_with_cached_models() {
+    let provider_toml = r#"
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+env_key = "DEEPSEEK_API_KEY"
+wire_api = "chat"
+
+[[models]]
+model_id = "deepseek-chat"
+model_name = "DeepSeek Chat"
+max_token_len = 64000
+max_output_tokens = 8000
+show_in_picker = true
+"#;
+
+    let provider: ModelProviderInfo = toml::from_str(provider_toml).unwrap();
+
+    assert_eq!(
+        provider.models,
+        vec![ProviderModelInfo {
+            model_id: "deepseek-chat".to_string(),
+            model_name: Some("DeepSeek Chat".to_string()),
+            max_token_len: Some(64_000),
+            max_output_tokens: Some(8_000),
+            show_in_picker: true,
+        }]
+    );
 }

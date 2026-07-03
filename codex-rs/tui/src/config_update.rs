@@ -18,6 +18,7 @@ use codex_app_server_protocol::SkillsConfigWriteResponse;
 use codex_config::loader::project_trust_key;
 use codex_features::FEATURES;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::ProviderModelInfo;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::TrustLevel;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -183,6 +184,19 @@ fn strip_json_null_values(value: &mut JsonValue) {
         }
         JsonValue::Null | JsonValue::Bool(_) | JsonValue::Number(_) | JsonValue::String(_) => {}
     }
+}
+
+pub(crate) fn build_model_provider_models_edit(
+    provider_id: &str,
+    models: &[ProviderModelInfo],
+) -> ConfigEdit {
+    replace_config_value(
+        format!(
+            "model_providers.{}.models",
+            quoted_key_path_segment(provider_id)
+        ),
+        serde_json::json!(models),
+    )
 }
 
 pub(crate) fn build_model_provider_delete_edit(provider_id: &str) -> ConfigEdit {

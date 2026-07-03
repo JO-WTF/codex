@@ -232,6 +232,7 @@ impl ProviderSetupState {
             base_url: Some(self.base_url.trim().to_string()),
             env_key: (self.env_key.trim() != "-").then(|| self.env_key.trim().to_string()),
             wire_api: self.wire_api,
+            models: Vec::new(),
             ..Default::default()
         }
     }

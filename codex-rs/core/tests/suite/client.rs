@@ -1236,6 +1236,7 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
         auth: Some(auth),
         aws: None,
         wire_api: WireApi::Responses,
+        models: Vec::new(),
         query_params: None,
         http_headers: None,
         env_http_headers: None,
@@ -1478,6 +1479,7 @@ async fn prefers_apikey_when_config_prefers_apikey_even_with_chatgpt_tokens() {
     let model_provider = ModelProviderInfo {
         base_url: Some(format!("{}/v1", server.uri())),
         supports_websockets: false,
+        models: Vec::new(),
         ..built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["openai"].clone()
     };
 
@@ -2848,6 +2850,7 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
         auth: None,
         aws: None,
         wire_api: WireApi::Responses,
+        models: Vec::new(),
         query_params: None,
         http_headers: None,
         env_http_headers: None,
@@ -3465,6 +3468,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         )])),
         env_key_instructions: None,
         wire_api: WireApi::Responses,
+        models: Vec::new(),
         http_headers: Some(std::collections::HashMap::from([(
             "Custom-Header".to_string(),
             "Value".to_string(),
@@ -3554,6 +3558,7 @@ async fn env_var_overrides_loaded_auth() {
         auth: None,
         aws: None,
         wire_api: WireApi::Responses,
+        models: Vec::new(),
         http_headers: Some(std::collections::HashMap::from([(
             "Custom-Header".to_string(),
             "Value".to_string(),

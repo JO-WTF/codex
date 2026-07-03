@@ -2500,7 +2500,7 @@ impl App {
                         &id,
                     )],
                     format!("Selected provider '{id}' for new sessions."),
-                    ProviderPostSaveAction::None,
+                    ProviderPostSaveAction::RefreshCurrentProvider,
                 )
             }
         };

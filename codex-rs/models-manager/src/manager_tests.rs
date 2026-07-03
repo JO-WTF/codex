@@ -75,6 +75,7 @@ fn assert_models_contain(actual: &[ModelInfo], expected: &[ModelInfo]) {
 struct TestModelsEndpoint {
     has_command_auth: bool,
     uses_codex_backend: bool,
+    remote_models_are_authoritative: bool,
     responses: Mutex<VecDeque<Vec<ModelInfo>>>,
     fetch_count: AtomicUsize,
 }
@@ -84,6 +85,7 @@ impl TestModelsEndpoint {
         Arc::new(Self {
             has_command_auth: false,
             uses_codex_backend: true,
+            remote_models_are_authoritative: false,
             responses: Mutex::new(responses.into()),
             fetch_count: AtomicUsize::new(0),
         })
@@ -93,6 +95,7 @@ impl TestModelsEndpoint {
         Arc::new(Self {
             has_command_auth: false,
             uses_codex_backend: false,
+            remote_models_are_authoritative: false,
             responses: Mutex::new(responses.into()),
             fetch_count: AtomicUsize::new(0),
         })
@@ -165,6 +168,10 @@ impl ModelsEndpointClient for TestModelsEndpoint {
 
     fn uses_codex_backend(&self) -> ModelsEndpointFuture<'_, bool> {
         Box::pin(async { self.uses_codex_backend })
+    }
+
+    fn remote_models_are_authoritative(&self) -> bool {
+        self.remote_models_are_authoritative
     }
 
     fn list_models<'a>(
@@ -508,6 +515,7 @@ async fn refresh_available_models_keeps_merging_for_api_auth() {
     let endpoint = Arc::new(TestModelsEndpoint {
         has_command_auth: true,
         uses_codex_backend: false,
+        remote_models_are_authoritative: false,
         responses: Mutex::new(vec![remote_models.clone()].into()),
         fetch_count: AtomicUsize::new(0),
     });
@@ -527,6 +535,36 @@ async fn refresh_available_models_keeps_merging_for_api_auth() {
         .expect("refresh succeeds");
 
     assert_eq!(manager.get_remote_models().await, expected);
+    assert_eq!(endpoint.fetch_count(), 1, "expected a single model fetch");
+}
+
+#[tokio::test]
+async fn refresh_available_models_uses_remote_only_catalog_for_authoritative_provider() {
+    let remote_models = vec![remote_model(
+        "third-party-model",
+        "Third Party Model",
+        /*priority*/ 0,
+    )];
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = Arc::new(TestModelsEndpoint {
+        has_command_auth: true,
+        uses_codex_backend: false,
+        remote_models_are_authoritative: true,
+        responses: Mutex::new(vec![remote_models.clone()].into()),
+        fetch_count: AtomicUsize::new(0),
+    });
+    let manager = openai_manager_for_tests_with_auth(
+        codex_home.path().to_path_buf(),
+        endpoint.clone(),
+        /*auth_manager*/ None,
+    );
+
+    manager
+        .refresh_available_models(RefreshStrategy::Online)
+        .await
+        .expect("refresh succeeds");
+
+    assert_eq!(manager.get_remote_models().await, remote_models);
     assert_eq!(endpoint.fetch_count(), 1, "expected a single model fetch");
 }
 

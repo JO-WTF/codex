@@ -330,7 +330,8 @@ impl ModelProvider for ConfiguredModelProvider {
 
 fn provider_model_to_model_info(model: &ProviderModelInfo) -> ModelInfo {
     let max_token_len = model.max_token_len.unwrap_or(128_000);
-    let context_window = model.context_window.or(Some(max_token_len));
+    let configured_context_window = model.context_window.or(model.max_token_len);
+    let context_window = Some(configured_context_window.unwrap_or(max_token_len));
     ModelInfo {
         slug: model.model_id.clone(),
         display_name: model
@@ -368,7 +369,7 @@ fn provider_model_to_model_info(model: &ProviderModelInfo) -> ModelInfo {
         supports_parallel_tool_calls: false,
         supports_image_detail_original: false,
         context_window,
-        max_context_window: context_window,
+        max_context_window: configured_context_window,
         auto_compact_token_limit: None,
         comp_hash: None,
         effective_context_window_percent: 95,
@@ -475,6 +476,33 @@ mod tests {
             "experimental_supported_tools": [],
         }))
         .expect("valid model")
+    }
+
+    #[test]
+    fn provider_model_context_window_sets_model_context_window() {
+        let model = ProviderModelInfo {
+            model_id: "provider-model".to_string(),
+            context_window: Some(200_000),
+            ..Default::default()
+        };
+
+        let model_info = provider_model_to_model_info(&model);
+
+        assert_eq!(model_info.context_window, Some(200_000));
+        assert_eq!(model_info.max_context_window, Some(200_000));
+    }
+
+    #[test]
+    fn provider_model_context_window_fallback_does_not_set_max_context_window() {
+        let model = ProviderModelInfo {
+            model_id: "provider-model".to_string(),
+            ..Default::default()
+        };
+
+        let model_info = provider_model_to_model_info(&model);
+
+        assert_eq!(model_info.context_window, Some(128_000));
+        assert_eq!(model_info.max_context_window, None);
     }
 
     fn bedrock_api_key_auth() -> CodexAuth {

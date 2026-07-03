@@ -490,6 +490,7 @@ model_id = "deepseek-chat"
 model_name = "DeepSeek Chat"
 max_token_len = 64000
 max_output_tokens = 8000
+context_window = 128000
 show_in_picker = true
 "#;
 
@@ -503,6 +504,8 @@ show_in_picker = true
             max_token_len: Some(64_000),
             max_output_tokens: Some(8_000),
             show_in_picker: true,
+            context_window: Some(128_000),
+            ..Default::default()
         }]
     );
 }

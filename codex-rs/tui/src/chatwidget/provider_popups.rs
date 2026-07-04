@@ -49,6 +49,7 @@ impl ChatWidget {
                             name: "My Provider".to_string(),
                             base_url: "https://api.example.com/v1".to_string(),
                             env_key: "MY_PROVIDER_API_KEY".to_string(),
+                            context_window: 262_144,
                             wire_api: WireApi::Chat,
                         },
                     });
@@ -305,6 +306,9 @@ impl ChatWidget {
             ProviderFormField::Id => draft.id = value,
             ProviderFormField::Name => draft.name = value,
             ProviderFormField::BaseUrl => draft.base_url = value,
+            ProviderFormField::ContextWindow => {
+                draft.context_window = value.parse::<i64>().unwrap_or(262_144);
+            }
             ProviderFormField::EnvKey => draft.env_key = value,
         }
 
@@ -682,6 +686,7 @@ fn provider_form_draft(id: &str, provider: &ModelProviderInfo) -> ProviderFormDr
             .clone()
             .unwrap_or_else(|| "https://api.example.com/v1".to_string()),
         env_key: provider.env_key.clone().unwrap_or_else(|| "-".to_string()),
+        context_window: 262_144,
         wire_api: provider.wire_api,
     }
 }
@@ -699,6 +704,7 @@ fn provider_form_field_title(mode: ProviderFormMode, field: ProviderFormField) -
         ProviderFormField::Id => "Provider id",
         ProviderFormField::Name => "Display name",
         ProviderFormField::BaseUrl => "Base URL",
+        ProviderFormField::ContextWindow => "Context window",
         ProviderFormField::EnvKey => "API key env var",
     };
     format!("{form_title}: {field_title}")
@@ -709,6 +715,7 @@ fn provider_form_field_placeholder(field: ProviderFormField) -> String {
         ProviderFormField::Id => "provider-id".to_string(),
         ProviderFormField::Name => "My Provider".to_string(),
         ProviderFormField::BaseUrl => "https://api.example.com/v1".to_string(),
+        ProviderFormField::ContextWindow => "262144".to_string(),
         ProviderFormField::EnvKey => "ENV_VAR_NAME or - for no env var".to_string(),
     }
 }
@@ -718,6 +725,7 @@ fn provider_form_field_value(draft: &ProviderFormDraft, field: ProviderFormField
         ProviderFormField::Id => draft.id.clone(),
         ProviderFormField::Name => draft.name.clone(),
         ProviderFormField::BaseUrl => draft.base_url.clone(),
+        ProviderFormField::ContextWindow => draft.context_window.to_string(),
         ProviderFormField::EnvKey => draft.env_key.clone(),
     }
 }
@@ -730,6 +738,9 @@ fn provider_form_context_label(
     match (mode, field) {
         (ProviderFormMode::Edit, ProviderFormField::Name) => {
             format!("Editing provider id: {}", draft.id)
+        }
+        (_, ProviderFormField::ContextWindow) => {
+            "Tokens of context; higher values for longer conversations".to_string()
         }
         (_, ProviderFormField::EnvKey) => {
             "Use - when the provider does not need an env var".to_string()
@@ -749,7 +760,7 @@ fn next_provider_form_field(
         (ProviderFormMode::Add, ProviderFormField::Id) => Some(ProviderFormField::Name),
         (_, ProviderFormField::Name) => Some(ProviderFormField::BaseUrl),
         (_, ProviderFormField::BaseUrl) => Some(ProviderFormField::EnvKey),
-        (_, ProviderFormField::EnvKey) => None,
+        (_, ProviderFormField::ContextWindow) | (_, ProviderFormField::EnvKey) => None,
         (ProviderFormMode::Edit, ProviderFormField::Id) => Some(ProviderFormField::Name),
     }
 }

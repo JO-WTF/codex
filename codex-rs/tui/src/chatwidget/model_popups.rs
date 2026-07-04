@@ -142,12 +142,9 @@ impl ChatWidget {
             });
         }
 
-        let provider_id = self.config.model_provider_id.as_str();
         let header = self.model_menu_header(
             "Select Model",
-            &format!(
-                "Showing models for provider '{provider_id}'. Switch providers to use a different model set."
-            ),
+            "Pick a quick auto mode or browse all models.",
         );
         self.bottom_pane.show_selection_view(SelectionViewParams {
             footer_hint: Some(standard_popup_hint_line()),
@@ -185,46 +182,28 @@ impl ChatWidget {
                 (!preset.description.is_empty()).then_some(preset.description.to_string());
             let is_current = preset.model.as_str() == self.current_model();
             let single_supported_effort = preset.supported_reasoning_efforts.len() == 1;
-            let no_supported_effort = preset.supported_reasoning_efforts.is_empty();
             let preset_for_action = preset.clone();
-            let actions: Vec<SelectionAction> = if no_supported_effort || single_supported_effort {
-                let model_for_action = preset.model.clone();
-                let effort_for_action = if no_supported_effort {
-                    None
-                } else {
-                    Some(preset.default_reasoning_effort.clone())
-                };
-                Self::model_selection_actions(
-                    model_for_action,
-                    effort_for_action,
-                    false,
-                )
-            } else {
-                vec![Box::new(move |tx| {
-                    let preset_for_event = preset_for_action.clone();
-                    tx.send(AppEvent::OpenReasoningPopup {
-                        model: preset_for_event,
-                    });
-                })]
-            };
+            let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
+                let preset_for_event = preset_for_action.clone();
+                tx.send(AppEvent::OpenReasoningPopup {
+                    model: preset_for_event,
+                });
+            })];
             items.push(SelectionItem {
                 name: preset.model.clone(),
                 description,
                 is_current,
                 is_default: preset.is_default,
                 actions,
-                dismiss_on_select: no_supported_effort || single_supported_effort,
+                dismiss_on_select: single_supported_effort,
                 dismiss_parent_on_child_accept: !single_supported_effort,
                 ..Default::default()
             });
         }
 
-        let provider_id = self.config.model_provider_id.as_str();
         let header = self.model_menu_header(
             "Select Model and Effort",
-            &format!(
-                "Showing models for provider '{provider_id}'. Switch providers to use a different model set."
-            ),
+            "Access legacy models by running codex -m <model_name> or in your config.toml",
         );
         self.bottom_pane.show_selection_view(SelectionViewParams {
             footer_hint: Some(self.bottom_pane.standard_popup_hint_line()),

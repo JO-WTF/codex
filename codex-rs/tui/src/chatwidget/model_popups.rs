@@ -179,6 +179,15 @@ impl ChatWidget {
             return;
         }
 
+        // Determine if the current provider is a third-party provider with cached models.
+        let provider_id = self.config.model_provider_id.clone();
+        let provider_models = self
+            .config
+            .model_providers
+            .get(&provider_id)
+            .map(|p| &p.models)
+            .cloned();
+
         let mut items: Vec<SelectionItem> = Vec::new();
         for preset in presets.into_iter() {
             let description =
@@ -187,6 +196,19 @@ impl ChatWidget {
             let single_supported_effort = preset.supported_reasoning_efforts.len() == 1;
             let no_supported_effort = preset.supported_reasoning_efforts.is_empty();
             let preset_for_action = preset.clone();
+
+            // Look up the model's context window from the provider's cached models.
+            let context_window = provider_models
+                .as_ref()
+                .and_then(|models| models.iter().find(|m| m.model_id == preset.model))
+                .and_then(|pm| pm.context_window);
+
+            // Append context window info to the model name when available.
+            let model_name = match context_window {
+                Some(cw) => format!("{} ({}KB ctx)", preset.model, cw / 1024),
+                None => preset.model.clone(),
+            };
+
             let actions: Vec<SelectionAction> = if no_supported_effort || single_supported_effort {
                 let model_for_action = preset.model.clone();
                 let effort_for_action = if no_supported_effort {
@@ -194,22 +216,42 @@ impl ChatWidget {
                 } else {
                     Some(preset.default_reasoning_effort.clone())
                 };
-                Self::model_selection_actions(
-                    model_for_action,
+                let mut base_actions = Self::model_selection_actions(
+                    model_for_action.clone(),
                     effort_for_action,
                     /*preserve_provider*/ false,
-                )
+                );
+                // Add "Set context window" action for third-party provider models
+                if provider_models.is_some() {
+                    let context_model_id = model_for_action.clone();
+                    let context_provider_id = provider_id.clone();
+                    base_actions.push(Box::new(move |tx| {
+                        tx.send(AppEvent::OpenModelContextWindowPopup {
+                            model_id: context_model_id.clone(),
+                            provider_id: context_provider_id.clone(),
+                        });
+                    }));
+                }
+                base_actions
             } else {
-                vec![Box::new(move |tx| {
+                let mut actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
                     let preset_for_event = preset_for_action.clone();
                     tx.send(AppEvent::OpenReasoningPopup {
                         model: preset_for_event,
                     });
-                })]
+                })];
+                let context_model_id = preset.model.clone();
+                let context_provider_id = provider_id.clone();
+                actions.push(Box::new(move |tx| {
+                    tx.send(AppEvent::OpenModelContextWindowPopup {
+                        model_id: context_model_id.clone(),
+                        provider_id: context_provider_id.clone(),
+                    });
+                }));
+                actions
             };
             items.push(SelectionItem {
-                name: preset.model.clone(),
-                description,
+                name: model_name,
                 is_current,
                 is_default: preset.is_default,
                 actions,
@@ -219,7 +261,6 @@ impl ChatWidget {
             });
         }
 
-        let provider_id = self.config.model_provider_id.as_str();
         let header = self.model_menu_header(
             "Select Model and Effort",
             &format!(
@@ -368,7 +409,6 @@ impl ChatWidget {
         });
     }
 
-    /// Open a popup to choose the reasoning effort (stage 2) for the given model.
     pub(crate) fn open_reasoning_popup(&mut self, preset: ModelPreset) {
         let default_effort = preset.default_reasoning_effort;
         let supported = preset.supported_reasoning_efforts;
@@ -551,5 +591,46 @@ impl ChatWidget {
         self.apply_model_and_effort_without_persist(model.clone(), effort.clone());
         self.app_event_tx
             .send(AppEvent::PersistModelSelection { model, effort });
+    }
+
+    pub(crate) fn open_model_context_window_popup(
+        &mut self,
+        model_id: &str,
+        provider_id: &str,
+    ) {
+        let Some(provider) = self.config.model_providers.get(provider_id).cloned() else {
+            self.add_error_message(format!("Provider '{provider_id}' not found."));
+            return;
+        };
+        let current_context_window = provider
+            .models
+            .iter()
+            .find(|m| m.model_id == model_id)
+            .and_then(|m| m.context_window)
+            .unwrap_or(262_144);
+        let tx = self.app_event_tx.clone();
+        let provider_id = provider_id.to_string();
+        let model_id = model_id.to_string();
+        let view = CustomPromptView::new(
+            format!("Context window for {model_id}"),
+            format!("Number of tokens (current: {current_context_window})"),
+            current_context_window.to_string(),
+            Some(
+                "Context window limit for this model in tokens; higher means longer conversations."
+                    .to_string(),
+            ),
+            Box::new(move |value: String| {
+                let parsed = value.trim().parse::<i64>().unwrap_or(current_context_window);
+                tx.send(AppEvent::ProviderConfigAction {
+                    action: crate::app_event::ProviderConfigAction::UpdateModelContextWindow {
+                        id: provider_id.clone(),
+                        model_id: model_id.clone(),
+                        context_window: parsed,
+                    },
+                });
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+        self.request_redraw();
     }
 }

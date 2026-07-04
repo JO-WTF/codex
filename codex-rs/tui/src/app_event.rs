@@ -158,6 +158,12 @@ pub(crate) enum ProviderConfigAction {
     FetchModels {
         id: String,
     },
+    /// Persist a context window update for a specific model under a provider.
+    UpdateModelContextWindow {
+        id: String,
+        model_id: String,
+        context_window: i64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -833,6 +839,12 @@ pub(crate) enum AppEvent {
     /// Open the full model picker (non-auto models).
     OpenAllModelsPopup {
         models: Vec<ModelPreset>,
+    },
+
+    /// Open the context window configuration popup for a specific model.
+    OpenModelContextWindowPopup {
+        model_id: String,
+        provider_id: String,
     },
 
     /// Open the confirmation prompt before enabling full access mode.

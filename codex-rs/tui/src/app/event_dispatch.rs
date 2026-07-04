@@ -2205,6 +2205,13 @@ impl App {
             AppEvent::KeymapCleared { context, action } => {
                 self.apply_keymap_clear(context, action).await;
             }
+            AppEvent::OpenModelContextWindowPopup {
+                model_id,
+                provider_id,
+            } => {
+                self.chat_widget
+                    .open_model_context_window_popup(&model_id, &provider_id);
+            }
         }
         Ok(AppRunControl::Continue)
     }
@@ -2527,6 +2534,33 @@ impl App {
                     )],
                     String::new(),
                     ProviderPostSaveAction::FetchAndOpenModels { provider_id: id },
+                )
+            }
+            crate::app_event::ProviderConfigAction::UpdateModelContextWindow {
+                id,
+                model_id,
+                context_window,
+            } => {
+                if !self.config.model_providers.contains_key(&id) {
+                    self.chat_widget
+                        .add_error_message(format!("Provider '{id}' does not exist."));
+                    return;
+                }
+                let Some(provider) = self.config.model_providers.get(&id) else {
+                    return;
+                };
+                let mut models = provider.models.clone();
+                if let Some(model) = models.iter_mut().find(|m| m.model_id == model_id) {
+                    model.context_window = Some(context_window);
+                }
+                (
+                    vec![crate::config_update::build_model_provider_models_edit(
+                        &id, &models,
+                    )],
+                    format!(
+                        "Updated context window for model '{model_id}' under provider '{id}'"
+                    ),
+                    ProviderPostSaveAction::RefreshCurrentProvider,
                 )
             }
         };

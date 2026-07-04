@@ -24,6 +24,9 @@ use tracing::info;
 
 const MODEL_CACHE_FILE: &str = "models_cache.json";
 const DEFAULT_MODEL_CACHE_TTL: Duration = Duration::from_secs(300);
+const MODEL_CACHE_KEY_MAX_PREFIX_LEN: usize = 80;
+const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+const FNV_PRIME: u64 = 0x100000001b3;
 
 /// Remote endpoint used by the OpenAI-compatible model manager.
 ///
@@ -49,6 +52,17 @@ pub trait ModelsEndpointClient: fmt::Debug + Send + Sync {
     /// response must not be mixed with Codex's bundled OpenAI catalog.
     fn remote_models_are_authoritative(&self) -> bool {
         false
+    }
+
+    /// Returns the provider-specific model-cache namespace, if this endpoint
+    /// must not share `models_cache.json` with the default OpenAI catalog.
+    ///
+    /// The model manager owns cache policy, but the endpoint owns provider
+    /// identity. Returning a namespace here keeps provider switching from
+    /// reusing another provider's fresh cache entry while preserving the legacy
+    /// cache file for built-in OpenAI-compatible providers.
+    fn cache_namespace(&self) -> Option<String> {
+        None
     }
 
     /// Fetches the latest remote model catalog and optional ETag.
@@ -224,6 +238,43 @@ pub struct StaticModelsManager {
     auth_manager: Option<Arc<AuthManager>>,
 }
 
+fn model_cache_path(codex_home: &std::path::Path, namespace: Option<&str>) -> PathBuf {
+    let Some(namespace) = namespace.filter(|value| !value.trim().is_empty()) else {
+        return codex_home.join(MODEL_CACHE_FILE);
+    };
+
+    let mut prefix = namespace
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('_')
+        .to_string();
+    if prefix.is_empty() {
+        prefix = "provider".to_string();
+    }
+    prefix.truncate(MODEL_CACHE_KEY_MAX_PREFIX_LEN);
+
+    codex_home.join(format!(
+        "models_cache-{prefix}-{hash:016x}.json",
+        hash = stable_cache_hash(namespace)
+    ))
+}
+
+fn stable_cache_hash(value: &str) -> u64 {
+    let mut hash = FNV_OFFSET_BASIS;
+    for byte in value.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    hash
+}
+
 impl OpenAiModelsManager {
     /// Construct an OpenAI-compatible remote model manager.
     pub fn new(
@@ -231,7 +282,8 @@ impl OpenAiModelsManager {
         endpoint_client: Arc<dyn ModelsEndpointClient>,
         auth_manager: Option<Arc<AuthManager>>,
     ) -> Self {
-        let cache_path = codex_home.join(MODEL_CACHE_FILE);
+        let cache_path =
+            model_cache_path(&codex_home, endpoint_client.cache_namespace().as_deref());
         let cache_manager = ModelsCacheManager::new(cache_path, DEFAULT_MODEL_CACHE_TTL);
         let remote_models = load_remote_models_from_file().unwrap_or_default();
         Self {
@@ -404,8 +456,6 @@ impl OpenAiModelsManager {
             codex_otel::start_global_timer("codex.remote_models.load_cache.duration_ms", &[]);
         let client_version = crate::client_version_to_whole();
         info!(client_version, "models cache: evaluating cache eligibility");
-        // TODO(celia-oai): Include provider identity in cache eligibility so switching
-        // providers does not reuse a fresh models_cache.json entry from another provider.
         let cache = match self.cache_manager.load_fresh(&client_version).await {
             Some(cache) => cache,
             None => {

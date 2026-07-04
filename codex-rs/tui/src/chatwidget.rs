@@ -368,6 +368,7 @@ use self::skills::is_app_mentionable;
 mod plugin_catalog;
 mod plugins;
 mod provider_popups;
+mod provider_sections;
 use self::plugins::PluginInstallAuthFlowState;
 use self::plugins::PluginListFetchState;
 use self::plugins::PluginsCacheState;

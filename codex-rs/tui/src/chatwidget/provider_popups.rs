@@ -10,6 +10,12 @@ use super::*;
 use crate::app_event::ProviderFormDraft;
 use crate::app_event::ProviderFormField;
 use crate::app_event::ProviderFormMode;
+use crate::chatwidget::provider_sections::ProviderListSection;
+use crate::chatwidget::provider_sections::ProviderSectionCounts;
+use crate::chatwidget::provider_sections::provider_description;
+use crate::chatwidget::provider_sections::provider_fetch_models_description;
+use crate::chatwidget::provider_sections::provider_list_section;
+use crate::chatwidget::provider_sections::provider_section_counts;
 
 const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use|fetch] ...";
 
@@ -23,10 +29,17 @@ impl ChatWidget {
             .iter()
             .map(|(id, provider)| {
                 let is_builtin = builtin_ids.contains_key(id);
-                (id.clone(), provider.clone(), is_builtin)
+                (
+                    id.clone(),
+                    provider.clone(),
+                    is_builtin,
+                    provider_list_section(id, is_builtin),
+                )
             })
             .collect::<Vec<_>>();
-        providers.sort_by(|(left_id, _, _), (right_id, _, _)| left_id.cmp(right_id));
+        providers.sort_by(|(left_id, _, _, _), (right_id, _, _, _)| left_id.cmp(right_id));
+
+        let provider_counts = provider_section_counts(&providers);
 
         let mut items = vec![
             SelectionItem {
@@ -56,30 +69,28 @@ impl ChatWidget {
             },
         ];
 
-        push_provider_section(
-            &mut items,
-            "Built-in providers",
-            "OpenAI providers managed by Codex; existing model behavior is unchanged.",
-        );
-        for (id, provider, is_builtin) in providers.iter().filter(|(_, _, is_builtin)| *is_builtin)
+        for (id, provider, is_builtin, _) in providers
+            .iter()
+            .filter(|(_, _, _, section)| *section == ProviderListSection::ManagedBuiltIn)
         {
             push_provider_list_item(&mut items, id, provider, *is_builtin, &current_provider_id);
         }
 
-        push_provider_section(
-            &mut items,
-            "Custom providers",
-            "OpenAI-compatible providers you manage, with provider-specific cached models.",
-        );
-        for (id, provider, is_builtin) in providers.iter().filter(|(_, _, is_builtin)| !*is_builtin)
+        for (id, provider, is_builtin, _) in providers
+            .iter()
+            .filter(|(_, _, _, section)| *section == ProviderListSection::LocalOss)
         {
             push_provider_list_item(&mut items, id, provider, *is_builtin, &current_provider_id);
         }
 
-        let header = providers_header(
-            "Manage Providers",
-            "Enter opens details. Add and edit use an interactive form.",
-        );
+        for (id, provider, is_builtin, _) in providers
+            .iter()
+            .filter(|(_, _, _, section)| *section == ProviderListSection::Custom)
+        {
+            push_provider_list_item(&mut items, id, provider, *is_builtin, &current_provider_id);
+        }
+
+        let header = providers_header(provider_counts);
         self.bottom_pane.show_selection_view(SelectionViewParams {
             is_searchable: true,
             search_placeholder: Some("Search providers".to_string()),
@@ -98,6 +109,7 @@ impl ChatWidget {
             return;
         };
         let is_builtin = built_in_model_providers(None).contains_key(id);
+        let section = provider_list_section(id, is_builtin);
         let current = id == self.config.model_provider_id;
 
         let mut items = vec![
@@ -123,16 +135,7 @@ impl ChatWidget {
             },
             SelectionItem {
                 name: "Fetch models".to_string(),
-                description: Some(if is_builtin {
-                    "Built-in providers use Codex's built-in model catalog".to_string()
-                } else if provider.models.is_empty() {
-                    "Fetch this provider's models, cache them, then choose one".to_string()
-                } else {
-                    format!(
-                        "Refresh {} cached models, then choose one",
-                        provider.models.len()
-                    )
-                }),
+                description: Some(provider_fetch_models_description(section, &provider)),
                 display_shortcut: Some(provider_shortcut('f')),
                 is_disabled: is_builtin,
                 actions: vec![Box::new({
@@ -582,15 +585,6 @@ impl ChatWidget {
     }
 }
 
-fn push_provider_section(items: &mut Vec<SelectionItem>, name: &str, description: &str) {
-    items.push(SelectionItem {
-        name: name.to_string(),
-        description: Some(description.to_string()),
-        is_disabled: true,
-        ..Default::default()
-    });
-}
-
 fn push_provider_list_item(
     items: &mut Vec<SelectionItem>,
     id: &str,
@@ -599,7 +593,7 @@ fn push_provider_list_item(
     current_provider_id: &str,
 ) {
     let title = provider_title(id, provider);
-    let description = Some(provider_description(provider, is_builtin));
+    let description = Some(provider_description(id, provider, is_builtin));
     let detail_id = id.to_string();
     items.push(SelectionItem {
         name: title,
@@ -630,17 +624,24 @@ fn provider_title(id: &str, provider: &ModelProviderInfo) -> String {
     }
 }
 
-fn provider_description(provider: &ModelProviderInfo, is_builtin: bool) -> String {
-    let source = if is_builtin { "built-in" } else { "custom" };
-    let base_url = provider.base_url.as_deref().unwrap_or("no base_url");
-    let env_key = provider.env_key.as_deref().unwrap_or("no env_key");
-    format!("{source} - {} - {base_url} - {env_key}", provider.wire_api)
-}
-
-fn providers_header(title: &str, subtitle: &str) -> Box<dyn Renderable> {
+fn providers_header(counts: ProviderSectionCounts) -> Box<dyn Renderable> {
     let mut header = ColumnRenderable::new();
-    header.push(Line::from(title.to_string().bold()));
-    header.push(Line::from(subtitle.to_string().dim()));
+    header.push(Line::from("Manage Providers".bold()));
+    header.push(Line::from(
+        "Review provider details. Add and edit use an interactive form.".dim(),
+    ));
+    header.push(Line::from(vec![
+        "Managed".bold(),
+        format!(" {}", counts.managed).dim(),
+        "  •  Local OSS".bold(),
+        format!(" {}", counts.local_oss).dim(),
+        "  •  Custom".bold(),
+        format!(" {}", counts.custom).dim(),
+    ]));
+    header.push(Line::from(
+        "Provider rows are grouped by type; local OSS providers are used by local-model flows."
+            .dim(),
+    ));
     Box::new(header)
 }
 
@@ -651,7 +652,9 @@ fn provider_detail_header(
 ) -> Box<dyn Renderable> {
     let mut header = ColumnRenderable::new();
     header.push(Line::from(provider_title(id, provider).bold()));
-    header.push(Line::from(provider_description(provider, is_builtin).dim()));
+    header.push(Line::from(
+        provider_description(id, provider, is_builtin).dim(),
+    ));
     Box::new(header)
 }
 

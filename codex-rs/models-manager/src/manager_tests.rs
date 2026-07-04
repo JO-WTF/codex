@@ -76,6 +76,7 @@ struct TestModelsEndpoint {
     has_command_auth: bool,
     uses_codex_backend: bool,
     remote_models_are_authoritative: bool,
+    cache_namespace: Option<String>,
     responses: Mutex<VecDeque<Vec<ModelInfo>>>,
     fetch_count: AtomicUsize,
 }
@@ -86,6 +87,7 @@ impl TestModelsEndpoint {
             has_command_auth: false,
             uses_codex_backend: true,
             remote_models_are_authoritative: false,
+            cache_namespace: None,
             responses: Mutex::new(responses.into()),
             fetch_count: AtomicUsize::new(0),
         })
@@ -96,6 +98,18 @@ impl TestModelsEndpoint {
             has_command_auth: false,
             uses_codex_backend: false,
             remote_models_are_authoritative: false,
+            cache_namespace: None,
+            responses: Mutex::new(responses.into()),
+            fetch_count: AtomicUsize::new(0),
+        })
+    }
+
+    fn with_cache_namespace(responses: Vec<Vec<ModelInfo>>, namespace: &str) -> Arc<Self> {
+        Arc::new(Self {
+            has_command_auth: false,
+            uses_codex_backend: true,
+            remote_models_are_authoritative: true,
+            cache_namespace: Some(namespace.to_string()),
             responses: Mutex::new(responses.into()),
             fetch_count: AtomicUsize::new(0),
         })
@@ -172,6 +186,10 @@ impl ModelsEndpointClient for TestModelsEndpoint {
 
     fn remote_models_are_authoritative(&self) -> bool {
         self.remote_models_are_authoritative
+    }
+
+    fn cache_namespace(&self) -> Option<String> {
+        self.cache_namespace.clone()
     }
 
     fn list_models<'a>(
@@ -591,6 +609,69 @@ async fn refresh_available_models_uses_cache_when_fresh() {
         endpoint.fetch_count(),
         1,
         "cache hit should avoid a second model fetch"
+    );
+}
+
+#[tokio::test]
+async fn refresh_available_models_keeps_provider_namespaced_caches_separate() {
+    let provider_a_models = vec![remote_model(
+        "provider-a",
+        "Provider A",
+        /*priority*/ 0,
+    )];
+    let provider_b_models = vec![remote_model(
+        "provider-b",
+        "Provider B",
+        /*priority*/ 0,
+    )];
+    let codex_home = tempdir().expect("temp dir");
+
+    let provider_a_fetch =
+        TestModelsEndpoint::with_cache_namespace(vec![provider_a_models.clone()], "provider-a");
+    let provider_a_manager = openai_manager_for_tests_with_auth(
+        codex_home.path().to_path_buf(),
+        provider_a_fetch.clone(),
+        /*auth_manager*/ None,
+    );
+    provider_a_manager
+        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .await
+        .expect("provider A refresh succeeds");
+
+    let provider_b_fetch =
+        TestModelsEndpoint::with_cache_namespace(vec![provider_b_models.clone()], "provider-b");
+    let provider_b_manager = openai_manager_for_tests_with_auth(
+        codex_home.path().to_path_buf(),
+        provider_b_fetch.clone(),
+        /*auth_manager*/ None,
+    );
+    provider_b_manager
+        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .await
+        .expect("provider B refresh succeeds");
+
+    assert_eq!(provider_a_fetch.fetch_count(), 1);
+    assert_eq!(provider_b_fetch.fetch_count(), 1);
+    assert_eq!(
+        provider_b_manager.get_remote_models().await,
+        provider_b_models
+    );
+
+    let provider_a_cached = TestModelsEndpoint::with_cache_namespace(Vec::new(), "provider-a");
+    let provider_a_cached_manager = openai_manager_for_tests_with_auth(
+        codex_home.path().to_path_buf(),
+        provider_a_cached.clone(),
+        /*auth_manager*/ None,
+    );
+    provider_a_cached_manager
+        .refresh_available_models(RefreshStrategy::OnlineIfUncached)
+        .await
+        .expect("provider A cached refresh succeeds");
+
+    assert_eq!(provider_a_cached.fetch_count(), 0);
+    assert_eq!(
+        provider_a_cached_manager.get_remote_models().await,
+        provider_a_models
     );
 }
 

@@ -1,5 +1,7 @@
 //! Provider management popups and slash-command helpers.
 
+use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::WireApi;
 use codex_model_provider_info::built_in_model_providers;
 use ratatui::style::Stylize;
 use ratatui::text::Line;
@@ -17,12 +19,38 @@ use crate::chatwidget::provider_sections::provider_section_counts;
 
 const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use|fetch] ...";
 
+impl ChatWidget {
+    pub(crate) fn open_provider_manager(&mut self) {
+        let current_provider_id = self.config.model_provider_id.clone();
+        let builtin_ids = built_in_model_providers(None);
+        let mut providers: Vec<(String, ModelProviderInfo, bool, ProviderListSection)> = self
+            .config
+            .model_providers
             .iter()
             .map(|(id, provider)| {
                 let is_builtin = builtin_ids.contains_key(id);
+                let section = provider_list_section(id, is_builtin);
+                (id.clone(), provider.clone(), is_builtin, section)
+            })
+            .collect();
+        providers.sort_by(|(left_id, _, _, _), (right_id, _, _, _)| left_id.cmp(right_id));
+
         let provider_counts = provider_section_counts(&providers);
 
-        let header = providers_header(provider_counts);
+        let mut items = vec![
+            SelectionItem {
+                name: "Add provider".to_string(),
+                description: Some("Create a custom OpenAI-compatible provider".to_string()),
+                actions: vec![Box::new(|tx| {
+                    tx.send(AppEvent::OpenProviderForm {
+                        mode: ProviderFormMode::Add,
+                        draft: ProviderFormDraft {
+                            id: "my-provider".to_string(),
+                            name: "My Provider".to_string(),
+                            base_url: "https://api.example.com/v1".to_string(),
+                            env_key: "MY_PROVIDER_API_KEY".to_string(),
+                            wire_api: WireApi::Chat,
+                        },
                     });
                 })],
                 dismiss_on_select: true,
@@ -42,8 +70,20 @@ const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use|fetch] ...
             "Built-in providers",
             "OpenAI providers managed by Codex; existing model behavior is unchanged.",
         );
-        for (id, provider, is_builtin) in providers.iter().filter(|(_, _, is_builtin)| *is_builtin)
-        {
+        for (id, provider, is_builtin, _) in providers.iter().filter(|(_, _, _, section)| {
+            *section == ProviderListSection::ManagedBuiltIn
+        }) {
+            push_provider_list_item(&mut items, id, provider, *is_builtin, &current_provider_id);
+        }
+
+        push_provider_section(
+            &mut items,
+            "Local OSS providers",
+            "Local-model providers managed by Codex; built-in but special.",
+        );
+        for (id, provider, is_builtin, _) in providers.iter().filter(|(_, _, _, section)| {
+            *section == ProviderListSection::LocalOss
+        }) {
             push_provider_list_item(&mut items, id, provider, *is_builtin, &current_provider_id);
         }
 
@@ -52,15 +92,13 @@ const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use|fetch] ...
             "Custom providers",
             "OpenAI-compatible providers you manage, with provider-specific cached models.",
         );
-        for (id, provider, is_builtin) in providers.iter().filter(|(_, _, is_builtin)| !*is_builtin)
-        {
+        for (id, provider, is_builtin, _) in providers.iter().filter(|(_, _, _, section)| {
+            *section == ProviderListSection::Custom
+        }) {
             push_provider_list_item(&mut items, id, provider, *is_builtin, &current_provider_id);
         }
 
-        let header = providers_header(
-            "Manage Providers",
-            "Review provider details. Add and edit use an interactive form.",
-        );
+        let header = providers_header(provider_counts);
         self.bottom_pane.show_selection_view(SelectionViewParams {
             is_searchable: true,
             search_placeholder: Some("Search providers".to_string()),
@@ -80,6 +118,7 @@ const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use|fetch] ...
         };
         let is_builtin = built_in_model_providers(None).contains_key(id);
         let current = id == self.config.model_provider_id;
+        let section = provider_list_section(id, is_builtin);
 
         let mut items = vec![
             SelectionItem {
@@ -104,16 +143,7 @@ const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use|fetch] ...
             },
             SelectionItem {
                 name: "Fetch models".to_string(),
-                description: Some(if is_builtin {
-                    "Built-in providers use Codex's built-in model catalog".to_string()
-                } else if provider.models.is_empty() {
-                    "Fetch this provider's models, cache them, then choose one".to_string()
-                } else {
-                    format!(
-                        "Refresh {} cached models, then choose one",
-                        provider.models.len()
-                    )
-                }),
+                description: Some(provider_fetch_models_description(section, &provider)),
                 display_shortcut: Some(provider_shortcut('f')),
                 is_disabled: is_builtin,
                 actions: vec![Box::new({
@@ -563,6 +593,26 @@ const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use|fetch] ...
     }
 }
 
+fn push_provider_section(items: &mut Vec<SelectionItem>, name: &str, description: &str) {
+    items.push(SelectionItem {
+        name: name.to_string(),
+        description: Some(description.to_string()),
+        is_disabled: true,
+        ..Default::default()
+    });
+}
+
+fn push_provider_list_item(
+    items: &mut Vec<SelectionItem>,
+    id: &str,
+    provider: &ModelProviderInfo,
+    is_builtin: bool,
+    current_provider_id: &str,
+) {
+    let title = provider_title(id, provider);
+    let description = Some(provider_description(id, provider, is_builtin));
+    let detail_id = id.to_string();
+    items.push(SelectionItem {
         name: title,
         description,
         is_current: id == current_provider_id,
@@ -583,7 +633,16 @@ const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use|fetch] ...
     });
 }
 
+fn provider_title(id: &str, provider: &ModelProviderInfo) -> String {
+    if provider.name.trim().is_empty() {
+        id.to_string()
+    } else {
+        format!("{} ({id})", provider.name)
+    }
+}
+
 fn providers_header(counts: ProviderSectionCounts) -> Box<dyn Renderable> {
+    let mut header = ColumnRenderable::new();
     header.push(Line::from("Manage Providers".bold()));
     header.push(Line::from(
         "Review provider details. Add and edit use an interactive form.".dim(),
@@ -600,6 +659,24 @@ fn providers_header(counts: ProviderSectionCounts) -> Box<dyn Renderable> {
         "Rows are grouped by provider type; local OSS providers are used by local-model flows."
             .dim(),
     ));
+    Box::new(header)
+}
+
+fn provider_detail_header(
+    id: &str,
+    provider: &ModelProviderInfo,
+    is_builtin: bool,
+) -> Box<dyn Renderable> {
+    let mut header = ColumnRenderable::new();
+    header.push(Line::from(provider_title(id, provider).bold()));
+    header.push(Line::from(provider_description(id, provider, is_builtin).dim()));
+    Box::new(header)
+}
+
+fn provider_form_draft(id: &str, provider: &ModelProviderInfo) -> ProviderFormDraft {
+    ProviderFormDraft {
+        id: id.to_string(),
+        name: provider.name.clone(),
         base_url: provider
             .base_url
             .clone()

@@ -186,6 +186,9 @@ impl BottomPaneView for ProviderFormView {
             }
             KeyCode::Backspace => self.backspace_selected_text(),
             KeyCode::Enter => self.submit(),
+            KeyCode::Char(' ') if self.selected_row() == ProviderFormRow::FetchModels => {
+                self.submit();
+            }
             KeyCode::Esc => {
                 self.completion = Some(ViewCompletion::Cancelled);
             }
@@ -293,7 +296,7 @@ impl Renderable for ProviderFormView {
         }
         lines.push("".into());
         lines.push(
-            "↑/↓ fields · ←/→ wire type · Enter fetch/edit · Esc cancel"
+            "↑/↓/Tab fields · ←/→ wire type · Enter/Space fetch · Esc cancel"
                 .dim()
                 .into(),
         );
@@ -1120,3 +1123,7 @@ fn parse_wire_api(value: &str) -> Option<WireApi> {
 fn provider_shortcut(ch: char) -> KeyBinding {
     KeyBinding::new(KeyCode::Char(ch), KeyModifiers::NONE)
 }
+
+#[cfg(test)]
+#[path = "provider_popups_tests.rs"]
+mod tests;

@@ -199,6 +199,17 @@ pub type ModelProviderFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a
 /// Shared runtime model provider handle.
 pub type SharedModelProvider = Arc<dyn ModelProvider>;
 
+/// Fetches the provider-owned remote model list without falling back to cached or bundled models.
+pub async fn fetch_provider_models(
+    provider_info: ModelProviderInfo,
+    auth_manager: Option<Arc<AuthManager>>,
+) -> codex_protocol::error::Result<Vec<ModelInfo>> {
+    let endpoint = OpenAiModelsEndpoint::new(provider_info, auth_manager);
+    let client_version = codex_models_manager::client_version_to_whole();
+    let (models, _etag) = endpoint.list_models(&client_version).await?;
+    Ok(models)
+}
+
 /// Creates the default runtime model provider for configured provider metadata.
 pub fn create_model_provider(
     provider_info: ModelProviderInfo,

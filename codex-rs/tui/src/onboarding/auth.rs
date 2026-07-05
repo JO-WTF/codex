@@ -16,7 +16,9 @@ use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::LoginAccountParams;
 use codex_app_server_protocol::LoginAccountResponse;
 use codex_login::read_openai_api_key_from_env;
+use codex_model_provider::fetch_provider_models as fetch_remote_provider_models;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::ProviderModelInfo;
 use codex_model_provider_info::WireApi;
 use codex_model_provider_info::built_in_model_providers;
 use codex_protocol::auth::AuthMode;
@@ -133,6 +135,7 @@ pub(crate) enum ProviderSetupField {
     EnvKey,
     WireApi,
     Model,
+    ContextWindow,
     Confirm,
 }
 
@@ -145,6 +148,9 @@ pub(crate) struct ProviderSetupState {
     env_key: String,
     wire_api: WireApi,
     model: String,
+    models: Vec<ProviderModelInfo>,
+    selected_model_index: usize,
+    context_window: i64,
     input: String,
     input_is_prefill: bool,
     is_saving: bool,
@@ -160,6 +166,9 @@ impl ProviderSetupState {
             env_key: "DEEPSEEK_API_KEY".to_string(),
             wire_api: WireApi::Chat,
             model: "deepseek-chat".to_string(),
+            models: Vec::new(),
+            selected_model_index: 0,
+            context_window: 262_144,
             input: "deepseek".to_string(),
             input_is_prefill: true,
             is_saving: false,
@@ -174,7 +183,8 @@ impl ProviderSetupState {
             ProviderSetupField::BaseUrl => self.base_url.clone(),
             ProviderSetupField::EnvKey => self.env_key.clone(),
             ProviderSetupField::WireApi => String::new(),
-            ProviderSetupField::Model => self.model.clone(),
+            ProviderSetupField::Model => String::new(),
+            ProviderSetupField::ContextWindow => self.context_window.to_string(),
             ProviderSetupField::Confirm => String::new(),
         };
         self.input_is_prefill = field != ProviderSetupField::Confirm;
@@ -211,14 +221,28 @@ impl ProviderSetupState {
                 self.env_key = value.to_string();
                 self.start_field(ProviderSetupField::WireApi);
             }
-            ProviderSetupField::WireApi => {
-                self.start_field(ProviderSetupField::Model);
-            }
+            ProviderSetupField::WireApi => {}
             ProviderSetupField::Model => {
-                if value.is_empty() {
-                    return Err("Model id cannot be empty".to_string());
+                if self.models.is_empty() {
+                    return Err("No models were fetched for this provider".to_string());
                 }
-                self.model = value.to_string();
+                if let Some(model) = self.models.get(self.selected_model_index) {
+                    self.model = model.model_id.clone();
+                    self.context_window = model
+                        .context_window
+                        .or(model.max_token_len)
+                        .unwrap_or(self.context_window);
+                }
+                self.start_field(ProviderSetupField::ContextWindow);
+            }
+            ProviderSetupField::ContextWindow => {
+                let parsed = value
+                    .parse::<i64>()
+                    .map_err(|_| "Context window must be a number".to_string())?;
+                if parsed <= 0 {
+                    return Err("Context window must be greater than zero".to_string());
+                }
+                self.context_window = parsed;
                 self.start_field(ProviderSetupField::Confirm);
             }
             ProviderSetupField::Confirm => {}
@@ -226,16 +250,56 @@ impl ProviderSetupState {
         Ok(())
     }
 
+    fn set_fetched_models(&mut self, models: Vec<ProviderModelInfo>) -> Result<(), String> {
+        if models.is_empty() {
+            return Err("Provider returned no models.".to_string());
+        }
+        self.models = models;
+        self.selected_model_index = 0;
+        self.model = self.models[0].model_id.clone();
+        self.context_window = self.models[0]
+            .context_window
+            .or(self.models[0].max_token_len)
+            .unwrap_or(self.context_window);
+        self.start_field(ProviderSetupField::Model);
+        Ok(())
+    }
+
+    fn move_model_selection(&mut self, direction: ModelSelectionDirection) {
+        if self.models.is_empty() {
+            return;
+        }
+        self.selected_model_index = match direction {
+            ModelSelectionDirection::Previous => self
+                .selected_model_index
+                .checked_sub(1)
+                .unwrap_or(self.models.len() - 1),
+            ModelSelectionDirection::Next => (self.selected_model_index + 1) % self.models.len(),
+        };
+        self.model = self.models[self.selected_model_index].model_id.clone();
+    }
+
     fn provider(&self) -> ModelProviderInfo {
+        let mut models = self.models.clone();
+        if let Some(model) = models.iter_mut().find(|model| model.model_id == self.model) {
+            model.context_window = Some(self.context_window);
+        }
+
         ModelProviderInfo {
             name: self.name.trim().to_string(),
             base_url: Some(self.base_url.trim().to_string()),
             env_key: (self.env_key.trim() != "-").then(|| self.env_key.trim().to_string()),
             wire_api: self.wire_api,
-            models: Vec::new(),
+            models,
             ..Default::default()
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum ModelSelectionDirection {
+    Previous,
+    Next,
 }
 
 #[derive(Clone)]
@@ -434,7 +498,7 @@ impl AuthModeWidget {
                 SignInState::ProviderSetup(state)
                     if !matches!(
                         state.field,
-                        ProviderSetupField::Confirm | ProviderSetupField::WireApi
+                        ProviderSetupField::Confirm | ProviderSetupField::WireApi | ProviderSetupField::Model
                     ) && !state.is_saving
             )
         })
@@ -858,6 +922,7 @@ impl AuthModeWidget {
             Constraint::Length(match state.field {
                 ProviderSetupField::Confirm => 0,
                 ProviderSetupField::WireApi => 5,
+                ProviderSetupField::Model => 7,
                 _ => 3,
             }),
             Constraint::Min(4),
@@ -884,6 +949,10 @@ impl AuthModeWidget {
                 state.wire_api.to_string().into(),
             ]),
             Line::from(vec!["  model: ".dim(), state.model.clone().into()]),
+            Line::from(vec![
+                "  context_window: ".dim(),
+                state.context_window.to_string().into(),
+            ]),
             "".into(),
         ];
         if state.field == ProviderSetupField::Confirm {
@@ -905,6 +974,18 @@ impl AuthModeWidget {
             ProviderSetupField::Confirm => {}
             ProviderSetupField::WireApi => {
                 Paragraph::new(provider_setup_wire_api_lines(state.wire_api))
+                    .wrap(Wrap { trim: false })
+                    .block(
+                        Block::default()
+                            .title(provider_setup_field_title(state.field))
+                            .borders(Borders::ALL)
+                            .border_type(BorderType::Rounded)
+                            .border_style(Style::default().fg(Color::Cyan)),
+                    )
+                    .render(input_area, buf);
+            }
+            ProviderSetupField::Model => {
+                Paragraph::new(provider_setup_model_lines(state))
                     .wrap(Wrap { trim: false })
                     .block(
                         Block::default()
@@ -937,6 +1018,8 @@ impl AuthModeWidget {
         let mut footer_lines: Vec<Line> = Vec::new();
         if state.field == ProviderSetupField::WireApi {
             footer_lines.push("  Use ↑/↓ or 1/2 to choose the wire API".dim().into());
+        } else if state.field == ProviderSetupField::Model {
+            footer_lines.push("  Use ↑/↓ or 1/2 to choose a model".dim().into());
         }
         footer_lines.extend([
             Line::from(vec![
@@ -944,6 +1027,8 @@ impl AuthModeWidget {
                 self.confirm_binding().into(),
                 if state.field == ProviderSetupField::Confirm {
                     " to save".dim()
+                } else if state.field == ProviderSetupField::WireApi {
+                    " to fetch models".dim()
                 } else {
                     " to continue".dim()
                 },
@@ -1150,6 +1235,7 @@ impl AuthModeWidget {
 
     fn handle_provider_setup_key_event(&mut self, key_event: &KeyEvent) -> bool {
         let mut should_save: Option<ProviderSetupState> = None;
+        let mut should_fetch: Option<ProviderSetupState> = None;
         let mut should_request_frame = false;
         let mut error_message: Option<String> = None;
 
@@ -1176,13 +1262,47 @@ impl AuthModeWidget {
                     self.set_error(/*message*/ None);
                     should_request_frame = true;
                 } else if keys::CONFIRM.is_pressed(*key_event) {
-                    state.start_field(ProviderSetupField::Model);
-                    self.set_error(/*message*/ None);
+                    let provider = state.provider();
+                    if built_in_model_providers(None).contains_key(&state.id) {
+                        error_message = Some(format!(
+                            "Provider id '{}' is built in. Choose a custom id such as '{}-custom'.",
+                            state.id, state.id
+                        ));
+                    } else if let Err(err) = provider.validate() {
+                        error_message = Some(format!("Invalid provider: {err}"));
+                    } else {
+                        state.is_saving = true;
+                        should_fetch = Some(state.clone());
+                        self.set_error(/*message*/ None);
+                    }
                     should_request_frame = true;
                 } else if keys::CANCEL.is_pressed(*key_event) {
                     *guard = SignInState::PickMode;
                     self.set_error(/*message*/ None);
                     self.highlighted_mode = SignInOption::CustomProvider;
+                    should_request_frame = true;
+                }
+            } else if state.field == ProviderSetupField::Model {
+                if keys::MOVE_UP.is_pressed(*key_event) || keys::SELECT_FIRST.is_pressed(*key_event)
+                {
+                    state.move_model_selection(ModelSelectionDirection::Previous);
+                    self.set_error(/*message*/ None);
+                    should_request_frame = true;
+                } else if keys::MOVE_DOWN.is_pressed(*key_event)
+                    || keys::SELECT_SECOND.is_pressed(*key_event)
+                {
+                    state.move_model_selection(ModelSelectionDirection::Next);
+                    self.set_error(/*message*/ None);
+                    should_request_frame = true;
+                } else if keys::CONFIRM.is_pressed(*key_event) {
+                    match state.apply_input() {
+                        Ok(()) => self.set_error(/*message*/ None),
+                        Err(err) => error_message = Some(err),
+                    }
+                    should_request_frame = true;
+                } else if keys::CANCEL.is_pressed(*key_event) {
+                    state.start_field(ProviderSetupField::WireApi);
+                    self.set_error(/*message*/ None);
                     should_request_frame = true;
                 }
             } else if keys::CANCEL.is_pressed(*key_event) {
@@ -1233,7 +1353,9 @@ impl AuthModeWidget {
                             && !key_event.modifiers.contains(KeyModifiers::ALT)
                             && !matches!(
                                 state.field,
-                                ProviderSetupField::Confirm | ProviderSetupField::WireApi
+                                ProviderSetupField::Confirm
+                                    | ProviderSetupField::WireApi
+                                    | ProviderSetupField::Model
                             ) =>
                     {
                         if state.input_is_prefill {
@@ -1252,7 +1374,9 @@ impl AuthModeWidget {
         if let Some(err) = error_message {
             self.set_error(Some(err));
         }
-        if let Some(state) = should_save {
+        if let Some(state) = should_fetch {
+            self.fetch_provider_models(state);
+        } else if let Some(state) = should_save {
             self.save_provider_setup(state);
         } else if should_request_frame {
             self.request_frame.schedule_frame();
@@ -1272,7 +1396,7 @@ impl AuthModeWidget {
         };
         if matches!(
             state.field,
-            ProviderSetupField::Confirm | ProviderSetupField::WireApi
+            ProviderSetupField::Confirm | ProviderSetupField::WireApi | ProviderSetupField::Model
         ) || state.is_saving
         {
             return true;
@@ -1286,6 +1410,50 @@ impl AuthModeWidget {
         self.set_error(/*message*/ None);
         self.request_frame.schedule_frame();
         true
+    }
+
+    fn fetch_provider_models(&mut self, state: ProviderSetupState) {
+        let sign_in_state = self.sign_in_state.clone();
+        let error = self.error.clone();
+        let request_frame = self.request_frame.clone();
+        tokio::spawn(async move {
+            let provider = state.provider();
+            let fetch_result = async {
+                let models = fetch_remote_provider_models(provider, /*auth_manager*/ None)
+                    .await
+                    .map_err(|err| err.to_string())?;
+                if models.is_empty() {
+                    return Err("Provider returned no models.".to_string());
+                }
+                Ok(models
+                    .into_iter()
+                    .map(codex_protocol::openai_models::ModelPreset::from)
+                    .map(|model| ProviderModelInfo::from(&model))
+                    .collect::<Vec<_>>())
+            }
+            .await;
+
+            let mut restored = state;
+            restored.is_saving = false;
+            match fetch_result.and_then(|models| {
+                restored.set_fetched_models(models)?;
+                Ok(())
+            }) {
+                Ok(()) => {
+                    *error.write().unwrap() = None;
+                    *sign_in_state.write().unwrap() = SignInState::ProviderSetup(restored);
+                }
+                Err(err) => {
+                    *error.write().unwrap() = Some(format!(
+                        "Failed to fetch provider models: {err}. Check the base URL, API key env var, and wire API."
+                    ));
+                    restored.start_field(ProviderSetupField::WireApi);
+                    *sign_in_state.write().unwrap() = SignInState::ProviderSetup(restored);
+                }
+            }
+            request_frame.schedule_frame();
+        });
+        self.request_frame.schedule_frame();
     }
 
     fn save_provider_setup(&mut self, state: ProviderSetupState) {
@@ -1532,6 +1700,36 @@ fn provider_setup_wire_api_lines(selected: WireApi) -> Vec<Line<'static>> {
     .collect()
 }
 
+fn provider_setup_model_lines(state: &ProviderSetupState) -> Vec<Line<'static>> {
+    let selected = state.selected_model_index;
+    state
+        .models
+        .iter()
+        .enumerate()
+        .take(5)
+        .map(|(index, model)| {
+            let context_window = model.context_window.or(model.max_token_len);
+            let context_suffix = context_window
+                .map(|window| format!(" — {}K ctx", window / 1024))
+                .unwrap_or_default();
+            let label = model
+                .model_name
+                .as_deref()
+                .unwrap_or(model.model_id.as_str());
+            let display = if label == model.model_id {
+                format!("{label}{context_suffix}")
+            } else {
+                format!("{} ({}){}", label, model.model_id, context_suffix)
+            };
+            if index == selected {
+                Line::from(vec!["  › ".cyan(), display.cyan().bold()])
+            } else {
+                Line::from(vec!["    ".into(), display.into()])
+            }
+        })
+        .collect()
+}
+
 fn provider_setup_field_title(field: ProviderSetupField) -> &'static str {
     match field {
         ProviderSetupField::Id => "Provider id",
@@ -1539,7 +1737,8 @@ fn provider_setup_field_title(field: ProviderSetupField) -> &'static str {
         ProviderSetupField::BaseUrl => "Base URL",
         ProviderSetupField::EnvKey => "API key env var",
         ProviderSetupField::WireApi => "Wire API",
-        ProviderSetupField::Model => "Default model",
+        ProviderSetupField::Model => "Select model",
+        ProviderSetupField::ContextWindow => "Context window",
         ProviderSetupField::Confirm => "Confirm",
     }
 }
@@ -1551,7 +1750,8 @@ fn provider_setup_placeholder(field: ProviderSetupField) -> &'static str {
         ProviderSetupField::BaseUrl => "https://api.deepseek.com/v1",
         ProviderSetupField::EnvKey => "DEEPSEEK_API_KEY or - for no env var",
         ProviderSetupField::WireApi => "chat or responses",
-        ProviderSetupField::Model => "deepseek-chat",
+        ProviderSetupField::Model => "",
+        ProviderSetupField::ContextWindow => "262144",
         ProviderSetupField::Confirm => "",
     }
 }

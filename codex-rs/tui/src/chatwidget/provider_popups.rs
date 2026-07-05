@@ -21,6 +21,7 @@ const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use|fetch] ...
 
 impl ChatWidget {
     pub(crate) fn open_provider_manager(&mut self) {
+        self.bottom_pane.clear_active_views();
         let current_provider_id = self.config.model_provider_id.clone();
         let builtin_ids = built_in_model_providers(None);
         let mut providers: Vec<(String, ModelProviderInfo, bool, ProviderListSection)> = self

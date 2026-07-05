@@ -17,3 +17,4 @@ pub use provider::ProviderAccountState;
 pub use provider::ProviderCapabilities;
 pub use provider::SharedModelProvider;
 pub use provider::create_model_provider;
+pub use provider::fetch_provider_models;

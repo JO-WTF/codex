@@ -3505,6 +3505,7 @@ text(
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(codex_protocol::protocol::TurnEnvironmentSelections::new(
                     cwd,
                     Vec::new(),

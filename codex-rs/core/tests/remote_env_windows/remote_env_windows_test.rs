@@ -14,8 +14,8 @@ use codex_app_server_protocol::TurnEnvironmentParams;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_exec_server::REMOTE_ENVIRONMENT_ID;
 use codex_exec_server::CODEX_EXEC_SERVER_URL_ENV_VAR;
+use codex_exec_server::REMOTE_ENVIRONMENT_ID;
 use codex_features::Feature;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
@@ -25,6 +25,9 @@ use codex_protocol::protocol::Op;
 use codex_protocol::protocol::TurnEnvironmentSelection;
 use codex_protocol::protocol::TurnEnvironmentSelections;
 use codex_protocol::user_input::UserInput;
+use codex_utils_path_uri::LegacyAppPathString;
+use codex_utils_path_uri::PathConvention;
+use codex_utils_path_uri::PathUri;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
@@ -35,9 +38,6 @@ use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
-use codex_utils_path_uri::LegacyAppPathString;
-use codex_utils_path_uri::PathConvention;
-use codex_utils_path_uri::PathUri;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -143,6 +143,7 @@ async fn windows_exec_server_runs_with_native_shell_and_cwd() -> Result<()> {
                     responsesapi_client_metadata: None,
                     additional_context: Default::default(),
                     thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                        model_provider_id: None,
                         environments: Some(environments),
                         approval_policy: Some(AskForApproval::Never),
                         sandbox_policy: Some(sandbox_policy),
@@ -254,7 +255,10 @@ async fn app_server_starts_thread_with_windows_environment_native_cwd() -> Resul
         .scope(|exec_server_url, wine_prefix| async move {
             let agents_path = PathUri::parse("file:///C:/windows/AGENTS.md")?;
             fs::write(
-                wine_prefix.join("drive_c").join("windows").join("AGENTS.md"),
+                wine_prefix
+                    .join("drive_c")
+                    .join("windows")
+                    .join("AGENTS.md"),
                 AGENTS_INSTRUCTIONS,
             )?;
 

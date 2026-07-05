@@ -51,6 +51,7 @@ async fn websocket_model_switch_to_responses_lite_omits_top_level_tools() -> Res
             additional_context: Default::default(),
             thread_settings: ThreadSettingsOverrides {
                 model: Some("gpt-5.4".to_string()),
+                model_provider_id: None,
                 ..Default::default()
             },
         })

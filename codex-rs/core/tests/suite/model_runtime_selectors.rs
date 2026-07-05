@@ -125,6 +125,7 @@ async fn response_for_remote_model(
         &test.codex,
         ThreadSettingsOverrides {
             model: Some(model_slug),
+            model_provider_id: None,
             ..Default::default()
         },
     )
@@ -277,6 +278,7 @@ async fn unsupported_code_mode_warning_is_emitted_each_turn() -> Result<()> {
         &test.codex,
         ThreadSettingsOverrides {
             model: Some(model_slug.to_string()),
+            model_provider_id: None,
             ..Default::default()
         },
     )
@@ -405,6 +407,7 @@ async fn remote_multi_agent_selector_uses_model_selected_before_first_turn() -> 
         &test.codex,
         ThreadSettingsOverrides {
             model: Some(CHILD_MODEL.to_string()),
+            model_provider_id: None,
             ..Default::default()
         },
     )

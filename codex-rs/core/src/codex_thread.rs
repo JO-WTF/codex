@@ -150,6 +150,7 @@ pub struct CodexThreadSettingsOverrides {
     pub active_permission_profile: Option<ActivePermissionProfile>,
     pub windows_sandbox_level: Option<WindowsSandboxLevel>,
     pub model: Option<String>,
+    pub model_provider_id: Option<String>,
     pub effort: Option<Option<ReasoningEffort>>,
     pub summary: Option<ReasoningSummary>,
     pub service_tier: Option<Option<String>>,
@@ -361,6 +362,7 @@ impl CodexThread {
         overrides: CodexThreadSettingsOverrides,
     ) -> SessionSettingsUpdate {
         let CodexThreadSettingsOverrides {
+            model_provider_id: None,
             environments,
             workspace_roots,
             profile_workspace_roots,
@@ -371,6 +373,7 @@ impl CodexThread {
             active_permission_profile,
             windows_sandbox_level,
             model,
+            model_provider_id,
             effort,
             summary,
             service_tier,
@@ -398,6 +401,7 @@ impl CodexThread {
             permission_profile,
             active_permission_profile,
             windows_sandbox_level,
+            model_provider_id,
             collaboration_mode: Some(collaboration_mode),
             multi_agent_mode,
             reasoning_summary: summary,

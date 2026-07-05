@@ -102,6 +102,7 @@ async fn renews_cache_ttl_on_matching_models_etag() -> Result<()> {
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(test.config.cwd.clone())),
                 approval_policy: Some(codex_protocol::protocol::AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),

@@ -119,6 +119,7 @@ async fn user_input_includes_collaboration_instructions_after_override() -> Resu
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(collaboration_mode),
             ..Default::default()
         },
@@ -172,6 +173,7 @@ async fn collaboration_instructions_added_on_user_turn() -> Result<()> {
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(test.config.cwd.clone())),
                 approval_policy: Some(test.config.permissions.approval_policy.value()),
                 sandbox_policy: Some(test.config.legacy_sandbox_policy()),
@@ -222,6 +224,7 @@ async fn collaboration_instructions_omitted_when_disabled() -> Result<()> {
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(test.config.cwd.clone())),
                 approval_policy: Some(test.config.permissions.approval_policy.value()),
                 sandbox_policy: Some(test.config.legacy_sandbox_policy()),
@@ -265,6 +268,7 @@ async fn override_then_next_turn_uses_updated_collaboration_instructions() -> Re
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(collaboration_mode),
             ..Default::default()
         },
@@ -313,6 +317,7 @@ async fn user_turn_overrides_collaboration_instructions_after_override() -> Resu
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(base_mode),
             ..Default::default()
         },
@@ -329,6 +334,7 @@ async fn user_turn_overrides_collaboration_instructions_after_override() -> Resu
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(test.config.cwd.clone())),
                 approval_policy: Some(test.config.permissions.approval_policy.value()),
                 sandbox_policy: Some(test.config.legacy_sandbox_policy()),
@@ -377,6 +383,7 @@ async fn collaboration_mode_update_emits_new_instruction_message() -> Result<()>
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(collab_mode_with_instructions(Some(first_text))),
             ..Default::default()
         },
@@ -400,6 +407,7 @@ async fn collaboration_mode_update_emits_new_instruction_message() -> Result<()>
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(collab_mode_with_instructions(Some(second_text))),
             ..Default::default()
         },
@@ -452,6 +460,7 @@ async fn collaboration_mode_update_noop_does_not_append() -> Result<()> {
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(collab_mode_with_instructions(Some(collab_text))),
             ..Default::default()
         },
@@ -475,6 +484,7 @@ async fn collaboration_mode_update_noop_does_not_append() -> Result<()> {
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(collab_mode_with_instructions(Some(collab_text))),
             ..Default::default()
         },
@@ -526,6 +536,7 @@ async fn collaboration_mode_update_emits_new_instruction_message_when_mode_chang
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(collab_mode_with_mode_and_instructions(
                 ModeKind::Default,
                 Some(default_text),
@@ -552,6 +563,7 @@ async fn collaboration_mode_update_emits_new_instruction_message_when_mode_chang
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(collab_mode_with_mode_and_instructions(
                 ModeKind::Plan,
                 Some(plan_text),
@@ -607,6 +619,7 @@ async fn collaboration_mode_update_noop_does_not_append_when_mode_is_unchanged()
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(collab_mode_with_mode_and_instructions(
                 ModeKind::Default,
                 Some(collab_text),
@@ -633,6 +646,7 @@ async fn collaboration_mode_update_noop_does_not_append_when_mode_is_unchanged()
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(collab_mode_with_mode_and_instructions(
                 ModeKind::Default,
                 Some(collab_text),
@@ -693,6 +707,7 @@ async fn resume_replays_collaboration_instructions() -> Result<()> {
     core_test_support::submit_thread_settings(
         &initial.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(collab_mode_with_instructions(Some(collab_text))),
             ..Default::default()
         },
@@ -755,6 +770,7 @@ async fn empty_collaboration_instructions_are_ignored() -> Result<()> {
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             collaboration_mode: Some(CollaborationMode {
                 mode: ModeKind::Default,
                 settings: Settings {

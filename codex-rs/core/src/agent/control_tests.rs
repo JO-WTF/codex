@@ -910,6 +910,7 @@ async fn spawn_agent_can_fork_parent_thread_history_with_sanitized_items() {
         .codex
         .session
         .update_settings(crate::session::SessionSettingsUpdate {
+            model_provider_id: None,
             multi_agent_mode: Some(MultiAgentMode::Proactive),
             ..Default::default()
         })
@@ -1322,6 +1323,7 @@ async fn spawn_agent_fork_last_n_turns_keeps_only_recent_turns() {
         .codex
         .session
         .update_settings(crate::session::SessionSettingsUpdate {
+            model_provider_id: None,
             multi_agent_mode: Some(MultiAgentMode::Proactive),
             ..Default::default()
         })
@@ -2426,6 +2428,7 @@ async fn resume_thread_subagent_restores_stored_metadata_and_effective_multi_age
         .codex
         .session
         .update_settings(crate::session::SessionSettingsUpdate {
+            model_provider_id: None,
             multi_agent_mode: Some(MultiAgentMode::ExplicitRequestOnly),
             ..Default::default()
         })

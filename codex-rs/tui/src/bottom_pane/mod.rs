@@ -1357,6 +1357,17 @@ impl BottomPane {
         self.push_view(view);
     }
 
+    /// Dismiss all active modal views before opening a new top-level surface.
+    pub(crate) fn clear_active_views(&mut self) {
+        if self.view_stack.is_empty() {
+            return;
+        }
+
+        self.view_stack.clear();
+        self.on_active_view_complete();
+        self.request_redraw();
+    }
+
     /// Called when the agent requests user approval.
     pub fn push_approval_request(&mut self, request: ApprovalRequest, features: &Features) {
         let request = if let Some(view) = self.view_stack.last_mut() {

@@ -108,6 +108,7 @@ async fn user_shell_command_without_local_environment_emits_error() -> anyhow::R
     submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             environments: Some(codex_protocol::protocol::TurnEnvironmentSelections::new(
                 test.config.cwd.clone(),
                 vec![],
@@ -219,6 +220,7 @@ async fn user_shell_command_does_not_replace_active_turn() -> anyhow::Result<()>
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(cwd)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),

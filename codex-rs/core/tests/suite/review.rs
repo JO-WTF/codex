@@ -824,6 +824,7 @@ async fn review_uses_overridden_cwd_for_base_branch_merge_base() {
     core_test_support::submit_thread_settings(
         &codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             environments: Some(local_selections(repo_path.to_path_buf().abs())),
             ..Default::default()
         },

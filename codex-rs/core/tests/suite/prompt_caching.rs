@@ -464,6 +464,7 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
     core_test_support::submit_thread_settings(
         &codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             approval_policy: Some(AskForApproval::Never),
             sandbox_policy: Some(sandbox_policy),
             permission_profile: Some(permission_profile),
@@ -568,6 +569,7 @@ async fn override_before_first_turn_emits_environment_context() -> anyhow::Resul
         codex_protocol::protocol::ThreadSettingsOverrides {
             approval_policy: Some(AskForApproval::Never),
             model: Some("gpt-5.4".to_string()),
+            model_provider_id: None,
             effort: Some(Some(ReasoningEffort::Low)),
             collaboration_mode: Some(collaboration_mode),
             ..Default::default()
@@ -769,6 +771,7 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
                 model: Some("o3".to_string()),
+                model_provider_id: None,
                 effort: Some(Some(ReasoningEffort::High)),
                 summary: Some(ReasoningSummary::Detailed),
                 ..Default::default()
@@ -880,6 +883,7 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(default_cwd.clone())),
                 approval_policy: Some(default_approval_policy),
                 sandbox_policy: Some(default_sandbox_policy.clone()),
@@ -908,6 +912,7 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(default_cwd.clone())),
                 approval_policy: Some(default_approval_policy),
                 sandbox_policy: Some(default_sandbox_policy.clone()),
@@ -1019,6 +1024,7 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(default_cwd.clone())),
                 approval_policy: Some(default_approval_policy),
                 sandbox_policy: Some(default_sandbox_policy.clone()),
@@ -1049,6 +1055,7 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(default_cwd.clone())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),

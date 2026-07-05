@@ -546,6 +546,7 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
         &codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
             model: Some(REMOTE_MODEL_SLUG.to_string()),
+            model_provider_id: None,
             ..Default::default()
         },
     )
@@ -583,6 +584,7 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(cwd_path)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
@@ -793,6 +795,7 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
         &codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
             model: Some(model.to_string()),
+            model_provider_id: None,
             ..Default::default()
         },
     )
@@ -811,6 +814,7 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(cwd_path)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),

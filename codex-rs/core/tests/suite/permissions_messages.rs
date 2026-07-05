@@ -106,6 +106,7 @@ async fn permissions_message_added_on_override_change() -> Result<()> {
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             approval_policy: Some(AskForApproval::Never),
             ..Default::default()
         },
@@ -235,6 +236,7 @@ async fn permissions_message_omitted_when_disabled() -> Result<()> {
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             approval_policy: Some(AskForApproval::Never),
             ..Default::default()
         },
@@ -317,6 +319,7 @@ async fn resume_replays_permissions_messages() -> Result<()> {
     core_test_support::submit_thread_settings(
         &initial.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             approval_policy: Some(AskForApproval::Never),
             ..Default::default()
         },
@@ -417,6 +420,7 @@ async fn resume_and_fork_append_permissions_messages() -> Result<()> {
     core_test_support::submit_thread_settings(
         &initial.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             approval_policy: Some(AskForApproval::Never),
             ..Default::default()
         },

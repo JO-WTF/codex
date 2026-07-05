@@ -70,6 +70,7 @@ fn read_only_text_turn_with_personality(
         responsesapi_client_metadata: None,
         additional_context: Default::default(),
         thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             environments: Some(local_selections(test.config.cwd.clone())),
             approval_policy: Some(approval_policy),
             sandbox_policy: Some(sandbox_policy),
@@ -337,6 +338,7 @@ async fn user_turn_personality_some_adds_update_message() -> anyhow::Result<()> 
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             personality: Some(Personality::Friendly),
             ..Default::default()
         },
@@ -413,6 +415,7 @@ async fn user_turn_personality_same_value_does_not_add_update_message() -> anyho
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             personality: Some(Personality::Pragmatic),
             ..Default::default()
         },
@@ -502,6 +505,7 @@ async fn user_turn_personality_skips_if_feature_disabled() -> anyhow::Result<()>
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             personality: Some(Personality::Pragmatic),
             ..Default::default()
         },
@@ -755,6 +759,7 @@ async fn user_turn_personality_remote_model_template_includes_update_message() -
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             personality: Some(Personality::Friendly),
             ..Default::default()
         },

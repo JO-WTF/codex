@@ -5,9 +5,9 @@
 
 use super::resize_reflow::trailing_run_start;
 use super::*;
+use crate::app_event::ProviderFormMode;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration_flow::ExternalAgentConfigMigrationFlowOutcome;
-use crate::app_event::ProviderFormMode;
 #[cfg(target_os = "windows")]
 use codex_config::types::WindowsSandboxModeToml;
 use std::sync::Arc;
@@ -854,6 +854,7 @@ impl App {
             AppEvent::OpenProviderManager => {
                 self.refresh_in_memory_config_from_disk_best_effort("opening provider manager")
                     .await;
+                self.chat_widget.dismiss_provider_form();
                 self.chat_widget.open_provider_manager();
             }
             AppEvent::OpenProviderDetail { id } => {
@@ -883,9 +884,7 @@ impl App {
                 if mode == ProviderFormMode::Add {
                     // For new providers, save immediately and open model picker
                     // so the user can select a model and configure context window.
-                    let provider = self
-                        .chat_widget
-                        .provider_from_form_draft(mode, &draft);
+                    let provider = self.chat_widget.provider_from_form_draft(mode, &draft);
                     self.app_event_tx.send(AppEvent::ProviderConfigAction {
                         action: crate::app_event::ProviderConfigAction::Upsert {
                             id: draft.id.clone(),
@@ -893,8 +892,7 @@ impl App {
                         },
                     });
                 } else {
-                    self.chat_widget
-                        .open_provider_form_confirm(mode, draft);
+                    self.chat_widget.open_provider_form_confirm(mode, draft);
                 }
             }
             AppEvent::ProviderConfigAction { action } => {
@@ -2225,8 +2223,11 @@ impl App {
                 provider_id,
                 pending_selection,
             } => {
-                self.chat_widget
-                    .open_model_context_window_popup(&model_id, &provider_id, pending_selection);
+                self.chat_widget.open_model_context_window_popup(
+                    &model_id,
+                    &provider_id,
+                    pending_selection,
+                );
             }
         }
         Ok(AppRunControl::Continue)
@@ -2456,6 +2457,124 @@ impl App {
             FetchAndOpenModels { provider_id: String },
         }
 
+        let action = match action {
+            crate::app_event::ProviderConfigAction::FetchModelsForNewProvider {
+                draft,
+                provider,
+            } => {
+                let id = draft.id.clone();
+                if builtin_ids.contains_key(&id) {
+                    self.chat_widget.add_error_message(format!(
+                        "Built-in provider '{id}' cannot be edited here."
+                    ));
+                    self.chat_widget.dismiss_provider_form();
+                    self.chat_widget
+                        .open_provider_form(ProviderFormMode::Add, draft);
+                    return;
+                }
+                if self.config.model_providers.contains_key(&id) {
+                    self.chat_widget.add_error_message(format!(
+                        "Provider '{id}' already exists. Choose a different id."
+                    ));
+                    self.chat_widget.dismiss_provider_form();
+                    self.chat_widget
+                        .open_provider_form(ProviderFormMode::Add, draft);
+                    return;
+                }
+                if let Err(err) = provider.validate() {
+                    self.chat_widget
+                        .add_error_message(format!("Invalid provider '{id}': {err}"));
+                    self.chat_widget.dismiss_provider_form();
+                    self.chat_widget
+                        .open_provider_form(ProviderFormMode::Add, draft);
+                    return;
+                }
+
+                let models = match codex_model_provider::fetch_provider_models(
+                    provider.clone(),
+                    /*auth_manager*/ None,
+                )
+                .await
+                {
+                    Ok(models) if !models.is_empty() => models,
+                    Ok(_) => {
+                        self.chat_widget
+                            .add_error_message(format!("Provider '{id}' returned no models."));
+                        self.chat_widget.dismiss_provider_form();
+                        self.chat_widget
+                            .open_provider_form(ProviderFormMode::Add, draft);
+                        return;
+                    }
+                    Err(err) => {
+                        self.chat_widget.add_error_message(format!(
+                        "Failed to fetch models for provider '{id}': {err}. Check the form values and try again."
+                    ));
+                        self.chat_widget.dismiss_provider_form();
+                        self.chat_widget
+                            .open_provider_form(ProviderFormMode::Add, draft);
+                        return;
+                    }
+                };
+
+                let provider_models = models
+                    .into_iter()
+                    .map(codex_protocol::openai_models::ModelPreset::from)
+                    .map(|model| codex_model_provider_info::ProviderModelInfo::from(&model))
+                    .collect::<Vec<_>>();
+                let mut provider = provider;
+                provider.models = provider_models.clone();
+
+                let edit = match crate::config_update::build_model_provider_edit(&id, &provider) {
+                    Ok(edit) => edit,
+                    Err(err) => {
+                        self.chat_widget.add_error_message(format!(
+                            "Failed to serialize provider '{id}': {err}"
+                        ));
+                        self.chat_widget.dismiss_provider_form();
+                        self.chat_widget
+                            .open_provider_form(ProviderFormMode::Add, draft);
+                        return;
+                    }
+                };
+                let edits = vec![
+                    edit,
+                    crate::config_update::build_model_provider_selection_edit(&id),
+                    crate::config_update::build_model_provider_models_edit(&id, &provider_models),
+                ];
+
+                match crate::config_update::write_config_batch(app_server.request_handle(), edits)
+                    .await
+                {
+                    Ok(_) => {
+                        self.refresh_in_memory_config_from_disk_best_effort("adding provider")
+                            .await;
+                        if self
+                            .refresh_model_catalog_from_app_server(
+                                ModelCatalogRefresh::CurrentProvider { app_server },
+                            )
+                            .await
+                        {
+                            self.chat_widget.dismiss_provider_form();
+                            self.chat_widget.open_model_popup();
+                        } else {
+                            self.chat_widget.open_provider_manager();
+                        }
+                    }
+                    Err(err) => {
+                        let error = crate::config_update::format_config_error(&err);
+                        self.chat_widget.add_error_message(format!(
+                            "Fetched models, but failed to save provider '{id}': {error}"
+                        ));
+                        self.chat_widget.dismiss_provider_form();
+                        self.chat_widget
+                            .open_provider_form(ProviderFormMode::Add, draft);
+                    }
+                }
+                return;
+            }
+            action => action,
+        };
+
         let (edits, success_message, post_save_action) = match action {
             crate::app_event::ProviderConfigAction::Upsert { id, provider } => {
                 if builtin_ids.contains_key(&id) {
@@ -2495,6 +2614,9 @@ impl App {
                     String::new()
                 };
                 (edits, success_message, post_save_action)
+            }
+            crate::app_event::ProviderConfigAction::FetchModelsForNewProvider { .. } => {
+                unreachable!("new provider model fetch is handled before config edits are built")
             }
             crate::app_event::ProviderConfigAction::Delete { id } => {
                 if builtin_ids.contains_key(&id) {

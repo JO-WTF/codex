@@ -20,6 +20,7 @@ use crate::chatwidget::provider_sections::provider_list_section;
 use crate::chatwidget::provider_sections::provider_section_counts;
 
 const PROVIDERS_USAGE: &str = "Usage: /providers [add|edit|delete|use|fetch] ...";
+const PROVIDER_FORM_VIEW_ID: &str = "provider-form";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ProviderFormRow {
@@ -65,6 +66,7 @@ struct ProviderFormView {
     selected: usize,
     completion: Option<ViewCompletion>,
     app_event_tx: AppEventSender,
+    is_fetching: bool,
 }
 
 impl ProviderFormView {
@@ -75,6 +77,7 @@ impl ProviderFormView {
             selected: 0,
             completion: None,
             app_event_tx,
+            is_fetching: false,
         }
     }
 
@@ -89,6 +92,9 @@ impl ProviderFormView {
     }
 
     fn edit_selected_text(&mut self, ch: char) {
+        if self.is_fetching {
+            return;
+        }
         match self.selected_row() {
             ProviderFormRow::Id => self.draft.id.push(ch),
             ProviderFormRow::Name => self.draft.name.push(ch),
@@ -134,10 +140,7 @@ impl ProviderFormView {
                     wire_api: self.draft.wire_api,
                     ..Default::default()
                 };
-                match self.mode {
-                    ProviderFormMode::Add => self.completion = Some(ViewCompletion::Accepted),
-                    ProviderFormMode::Edit => self.completion = Some(ViewCompletion::Accepted),
-                }
+                self.is_fetching = true;
                 self.draft.id = self.draft.id.trim().to_string();
                 let draft = self.draft.clone();
                 self.app_event_tx.send(AppEvent::ProviderConfigAction {
@@ -170,7 +173,7 @@ impl ProviderFormView {
 
 impl BottomPaneView for ProviderFormView {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        if key_event.kind == KeyEventKind::Release {
+        if self.is_fetching || key_event.kind == KeyEventKind::Release {
             return;
         }
         match key_event.code {
@@ -202,6 +205,10 @@ impl BottomPaneView for ProviderFormView {
     fn completion(&self) -> Option<ViewCompletion> {
         self.completion
     }
+
+    fn view_id(&self) -> Option<&'static str> {
+        Some(PROVIDER_FORM_VIEW_ID)
+    }
 }
 
 impl Renderable for ProviderFormView {
@@ -216,7 +223,11 @@ impl Renderable for ProviderFormView {
         }
         let mut lines = vec![
             Line::from(provider_form_title(self.mode).bold()),
-            Line::from("Fill the form, then choose Fetch models.".dim()),
+            Line::from(if self.is_fetching {
+                "Fetching models...".cyan()
+            } else {
+                "Fill the form, then choose Fetch models.".dim()
+            }),
             "".into(),
         ];
         for (index, row) in ProviderFormRow::rows(self.mode).iter().enumerate() {
@@ -224,17 +235,29 @@ impl Renderable for ProviderFormView {
             let marker = if selected { "› ".cyan() } else { "  ".into() };
             let line = match row {
                 ProviderFormRow::Id => {
-                    provider_form_row_line(marker, "id", &self.draft.id, selected)
+                    provider_form_row_line(marker, "id", &self.draft.id, "provider-id", selected)
                 }
-                ProviderFormRow::Name => {
-                    provider_form_row_line(marker, "name", &self.draft.name, selected)
-                }
-                ProviderFormRow::BaseUrl => {
-                    provider_form_row_line(marker, "url", &self.draft.base_url, selected)
-                }
-                ProviderFormRow::EnvKey => {
-                    provider_form_row_line(marker, "apikey env", &self.draft.env_key, selected)
-                }
+                ProviderFormRow::Name => provider_form_row_line(
+                    marker,
+                    "name",
+                    &self.draft.name,
+                    "My Provider",
+                    selected,
+                ),
+                ProviderFormRow::BaseUrl => provider_form_row_line(
+                    marker,
+                    "url",
+                    &self.draft.base_url,
+                    "https://api.example.com/v1",
+                    selected,
+                ),
+                ProviderFormRow::EnvKey => provider_form_row_line(
+                    marker,
+                    "apikey env",
+                    &self.draft.env_key,
+                    "ENV_VAR_NAME or -",
+                    selected,
+                ),
                 ProviderFormRow::WireApi => {
                     let chat = if self.draft.wire_api == WireApi::Chat {
                         " Chat ".cyan().bold()
@@ -255,7 +278,12 @@ impl Renderable for ProviderFormView {
                     ])
                 }
                 ProviderFormRow::FetchModels => {
-                    Line::from(vec![marker, "Fetch models".green().bold()])
+                    let label = if self.is_fetching {
+                        "Fetching models..."
+                    } else {
+                        "Fetch models"
+                    };
+                    Line::from(vec![marker, label.green().bold()])
                 }
                 ProviderFormRow::Cancel => Line::from(vec![marker, "Cancel".dim()]),
             };
@@ -275,9 +303,12 @@ fn provider_form_row_line(
     marker: Span<'static>,
     label: &'static str,
     value: &str,
+    placeholder: &str,
     selected: bool,
 ) -> Line<'static> {
-    let value = if selected {
+    let value = if value.is_empty() {
+        placeholder.to_string().dim()
+    } else if selected {
         value.to_string().cyan()
     } else {
         value.to_string().into()
@@ -286,6 +317,11 @@ fn provider_form_row_line(
 }
 
 impl ChatWidget {
+    pub(crate) fn dismiss_provider_form(&mut self) {
+        self.bottom_pane
+            .dismiss_active_view_if_id(PROVIDER_FORM_VIEW_ID);
+    }
+
     pub(crate) fn open_provider_manager(&mut self) {
         self.bottom_pane.clear_active_views();
         let current_provider_id = self.config.model_provider_id.clone();
@@ -312,10 +348,10 @@ impl ChatWidget {
                     tx.send(AppEvent::OpenProviderForm {
                         mode: ProviderFormMode::Add,
                         draft: ProviderFormDraft {
-                            id: "my-provider".to_string(),
-                            name: "My Provider".to_string(),
-                            base_url: "https://api.example.com/v1".to_string(),
-                            env_key: "MY_PROVIDER_API_KEY".to_string(),
+                            id: String::new(),
+                            name: String::new(),
+                            base_url: String::new(),
+                            env_key: String::new(),
                             wire_api: WireApi::Chat,
                         },
                     });

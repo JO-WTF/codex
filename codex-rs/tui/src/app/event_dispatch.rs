@@ -854,6 +854,7 @@ impl App {
             AppEvent::OpenProviderManager => {
                 self.refresh_in_memory_config_from_disk_best_effort("opening provider manager")
                     .await;
+                self.chat_widget.dismiss_provider_form();
                 self.chat_widget.open_provider_manager();
             }
             AppEvent::OpenProviderDetail { id } => {
@@ -2466,6 +2467,7 @@ impl App {
                     self.chat_widget.add_error_message(format!(
                         "Built-in provider '{id}' cannot be edited here."
                     ));
+                    self.chat_widget.dismiss_provider_form();
                     self.chat_widget
                         .open_provider_form(ProviderFormMode::Add, draft);
                     return;
@@ -2474,6 +2476,7 @@ impl App {
                     self.chat_widget.add_error_message(format!(
                         "Provider '{id}' already exists. Choose a different id."
                     ));
+                    self.chat_widget.dismiss_provider_form();
                     self.chat_widget
                         .open_provider_form(ProviderFormMode::Add, draft);
                     return;
@@ -2481,6 +2484,7 @@ impl App {
                 if let Err(err) = provider.validate() {
                     self.chat_widget
                         .add_error_message(format!("Invalid provider '{id}': {err}"));
+                    self.chat_widget.dismiss_provider_form();
                     self.chat_widget
                         .open_provider_form(ProviderFormMode::Add, draft);
                     return;
@@ -2496,6 +2500,7 @@ impl App {
                     Ok(_) => {
                         self.chat_widget
                             .add_error_message(format!("Provider '{id}' returned no models."));
+                        self.chat_widget.dismiss_provider_form();
                         self.chat_widget
                             .open_provider_form(ProviderFormMode::Add, draft);
                         return;
@@ -2504,6 +2509,7 @@ impl App {
                         self.chat_widget.add_error_message(format!(
                         "Failed to fetch models for provider '{id}': {err}. Check the form values and try again."
                     ));
+                        self.chat_widget.dismiss_provider_form();
                         self.chat_widget
                             .open_provider_form(ProviderFormMode::Add, draft);
                         return;
@@ -2524,6 +2530,7 @@ impl App {
                         self.chat_widget.add_error_message(format!(
                             "Failed to serialize provider '{id}': {err}"
                         ));
+                        self.chat_widget.dismiss_provider_form();
                         self.chat_widget
                             .open_provider_form(ProviderFormMode::Add, draft);
                         return;
@@ -2547,6 +2554,7 @@ impl App {
                             )
                             .await
                         {
+                            self.chat_widget.dismiss_provider_form();
                             self.chat_widget.open_model_popup();
                         } else {
                             self.chat_widget.open_provider_manager();
@@ -2557,6 +2565,7 @@ impl App {
                         self.chat_widget.add_error_message(format!(
                             "Fetched models, but failed to save provider '{id}': {error}"
                         ));
+                        self.chat_widget.dismiss_provider_form();
                         self.chat_widget
                             .open_provider_form(ProviderFormMode::Add, draft);
                     }

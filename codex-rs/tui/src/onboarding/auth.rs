@@ -160,16 +160,16 @@ impl ProviderSetupState {
     fn new() -> Self {
         Self {
             field: ProviderSetupField::Id,
-            id: "deepseek".to_string(),
-            name: "DeepSeek".to_string(),
-            base_url: "https://api.deepseek.com/v1".to_string(),
-            env_key: "DEEPSEEK_API_KEY".to_string(),
+            id: String::new(),
+            name: String::new(),
+            base_url: String::new(),
+            env_key: String::new(),
             wire_api: WireApi::Chat,
             model: "deepseek-chat".to_string(),
             models: Vec::new(),
             selected_model_index: 0,
             context_window: 262_144,
-            input: "deepseek".to_string(),
+            input: String::new(),
             input_is_prefill: true,
             is_saving: false,
         }

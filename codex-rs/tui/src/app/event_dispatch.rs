@@ -7,7 +7,7 @@ use super::resize_reflow::trailing_run_start;
 use super::*;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration_flow::ExternalAgentConfigMigrationFlowOutcome;
-use crate::model_catalog::ModelCatalog;
+use crate::app_event::ProviderFormMode;
 #[cfg(target_os = "windows")]
 use codex_config::types::WindowsSandboxModeToml;
 use std::sync::Arc;
@@ -879,8 +879,23 @@ impl App {
                 draft,
                 wire_api,
             } => {
-                self.chat_widget
-                    .open_provider_form_confirm(mode, draft.with_wire_api(wire_api));
+                let draft = draft.with_wire_api(wire_api);
+                if mode == ProviderFormMode::Add {
+                    // For new providers, save immediately and open model picker
+                    // so the user can select a model and configure context window.
+                    let provider = self
+                        .chat_widget
+                        .provider_from_form_draft(mode, &draft);
+                    self.app_event_tx.send(AppEvent::ProviderConfigAction {
+                        action: crate::app_event::ProviderConfigAction::Upsert {
+                            id: draft.id.clone(),
+                            provider,
+                        },
+                    });
+                } else {
+                    self.chat_widget
+                        .open_provider_form_confirm(mode, draft);
+                }
             }
             AppEvent::ProviderConfigAction { action } => {
                 self.handle_provider_config_action(app_server, action).await;
@@ -2208,9 +2223,10 @@ impl App {
             AppEvent::OpenModelContextWindowPopup {
                 model_id,
                 provider_id,
+                pending_selection,
             } => {
                 self.chat_widget
-                    .open_model_context_window_popup(&model_id, &provider_id);
+                    .open_model_context_window_popup(&model_id, &provider_id, pending_selection);
             }
         }
         Ok(AppRunControl::Continue)
@@ -2473,9 +2489,10 @@ impl App {
                 };
                 let success_message = if provider_is_new {
                     tracing::info!("Saved and selected provider '{id}'.");
-                    "Provider added.".to_string()
+                    String::new()
                 } else {
-                    format!("Saved provider '{id}'.")
+                    tracing::info!("Saved provider '{id}'.");
+                    String::new()
                 };
                 (edits, success_message, post_save_action)
             }
@@ -2557,9 +2574,7 @@ impl App {
                     vec![crate::config_update::build_model_provider_models_edit(
                         &id, &models,
                     )],
-                    format!(
-                        "Updated context window for model '{model_id}' under provider '{id}'"
-                    ),
+                    String::new(),
                     ProviderPostSaveAction::RefreshCurrentProvider,
                 )
             }

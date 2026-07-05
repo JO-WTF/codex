@@ -177,7 +177,6 @@ pub(crate) enum ProviderFormField {
     Id,
     Name,
     BaseUrl,
-    ContextWindow,
     EnvKey,
 }
 
@@ -187,7 +186,6 @@ pub(crate) struct ProviderFormDraft {
     pub(crate) name: String,
     pub(crate) base_url: String,
     pub(crate) env_key: String,
-    pub(crate) context_window: i64,
     pub(crate) wire_api: WireApi,
 }
 
@@ -842,9 +840,12 @@ pub(crate) enum AppEvent {
     },
 
     /// Open the context window configuration popup for a specific model.
+    /// When `pending_selection` is `Some` the popup will automatically complete
+    /// the model selection after the context window is saved.
     OpenModelContextWindowPopup {
         model_id: String,
         provider_id: String,
+        pending_selection: Option<crate::chatwidget::model_popups::PendingModelSelection>,
     },
 
     /// Open the confirmation prompt before enabling full access mode.

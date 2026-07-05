@@ -149,6 +149,10 @@ pub(crate) enum ProviderConfigAction {
         id: String,
         provider: ModelProviderInfo,
     },
+    FetchModelsForNewProvider {
+        draft: ProviderFormDraft,
+        provider: ModelProviderInfo,
+    },
     Delete {
         id: String,
     },

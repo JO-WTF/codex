@@ -31,6 +31,7 @@ impl App {
         Some(ThreadSettingsUpdateParams {
             thread_id: thread_id.to_string(),
             model: Some(model),
+            model_provider: Some(self.config.model_provider_id.clone()),
             collaboration_mode: Some(self.chat_widget.effective_collaboration_mode()),
             ..ThreadSettingsUpdateParams::default()
         })
@@ -124,6 +125,7 @@ impl App {
                 .as_ref()
                 .map(|profile| profile.id.clone()),
             model: model.clone(),
+            model_provider: Some(self.config.model_provider_id.clone()),
             effort: effort.clone().unwrap_or_default(),
             summary: *summary,
             service_tier: service_tier.clone(),
@@ -201,6 +203,7 @@ fn thread_settings_update_has_changes(params: &ThreadSettingsUpdateParams) -> bo
         || params.sandbox_policy.is_some()
         || params.permissions.is_some()
         || params.model.is_some()
+        || params.model_provider.is_some()
         || params.service_tier.is_some()
         || params.effort.is_some()
         || params.summary.is_some()

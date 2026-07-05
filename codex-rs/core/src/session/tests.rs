@@ -962,6 +962,7 @@ async fn new_turn_refreshes_managed_network_proxy_for_sandbox_change() -> anyhow
         .new_turn_with_sub_id(
             "sandbox-policy-change".to_string(),
             SessionSettingsUpdate {
+                model_provider_id: None,
                 sandbox_policy: Some(SandboxPolicy::DangerFullAccess),
                 ..Default::default()
             },
@@ -2622,6 +2623,7 @@ async fn config_change_contributor_observes_effective_config_changes() {
     );
     session
         .update_settings(SessionSettingsUpdate {
+            model_provider_id: None,
             collaboration_mode: Some(collaboration_mode),
             ..Default::default()
         })
@@ -2857,6 +2859,7 @@ async fn session_permission_profile_rebinds_runtime_workspace_roots() -> anyhow:
     assert!(initial_policy.can_write_path_with_cwd(old_root.as_path(), config.cwd.as_path()));
 
     let updated = session_configuration.apply(&SessionSettingsUpdate {
+        model_provider_id: None,
         workspace_roots: Some(vec![new_root.clone()]),
         ..Default::default()
     })?;
@@ -2947,6 +2950,7 @@ async fn fork_startup_context_then_first_turn_diff_snapshot() -> anyhow::Result<
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: ThreadSettingsOverrides {
+                model_provider_id: None,
                 approval_policy: Some(AskForApproval::Never),
                 collaboration_mode: Some(collaboration_mode),
                 ..Default::default()
@@ -4224,6 +4228,7 @@ async fn session_settings_null_service_tier_update_uses_default_service_tier() {
 
     let updated = session_configuration
         .apply(&SessionSettingsUpdate {
+            model_provider_id: None,
             service_tier: Some(None),
             ..Default::default()
         })
@@ -4241,6 +4246,7 @@ async fn session_settings_legacy_fast_service_tier_update_uses_priority_request_
 
     let updated = session_configuration
         .apply(&SessionSettingsUpdate {
+            model_provider_id: None,
             service_tier: Some(Some("fast".to_string())),
             ..Default::default()
         })
@@ -4449,6 +4455,7 @@ async fn session_configuration_apply_preserves_profile_file_system_policy_on_cwd
 
     let updated = session_configuration
         .apply(&SessionSettingsUpdate {
+            model_provider_id: None,
             environments: Some(TurnEnvironmentSelections::new(project_root, Vec::new())),
             ..Default::default()
         })
@@ -4501,6 +4508,7 @@ async fn session_configuration_apply_permission_profile_preserves_existing_deny_
     );
     let updated = session_configuration
         .apply(&SessionSettingsUpdate {
+            model_provider_id: None,
             permission_profile: Some(permission_profile),
             ..Default::default()
         })
@@ -4542,6 +4550,7 @@ async fn session_configuration_apply_permission_profile_accepts_direct_write_roo
 
     let updated = session_configuration
         .apply(&SessionSettingsUpdate {
+            model_provider_id: None,
             permission_profile: Some(permission_profile.clone()),
             ..Default::default()
         })
@@ -4588,6 +4597,7 @@ async fn session_configuration_apply_rebinds_symbolic_profile_to_updated_workspa
 
     let updated = session_configuration
         .apply(&SessionSettingsUpdate {
+            model_provider_id: None,
             workspace_roots: Some(vec![new_root.clone()]),
             permission_profile: Some(permission_profile),
             active_permission_profile: Some(ActivePermissionProfile::new("dev")),
@@ -4636,6 +4646,7 @@ async fn session_configuration_apply_retargets_implicit_workspace_root_on_cwd_up
 
     let updated = session_configuration
         .apply(&SessionSettingsUpdate {
+            model_provider_id: None,
             environments: Some(TurnEnvironmentSelections::new(new_root.clone(), Vec::new())),
             ..Default::default()
         })
@@ -4742,6 +4753,7 @@ async fn active_profile_update_rebuilds_network_proxy_config() -> std::io::Resul
 
     let updated = session_configuration
         .apply(&SessionSettingsUpdate {
+            model_provider_id: None,
             permission_profile: Some(selected_config.permissions.permission_profile().clone()),
             active_permission_profile: selected_config.permissions.active_permission_profile(),
             ..Default::default()
@@ -4883,6 +4895,7 @@ async fn session_configuration_apply_retargets_legacy_workspace_root_on_cwd_upda
 
     let updated = session_configuration
         .apply(&SessionSettingsUpdate {
+            model_provider_id: None,
             environments: Some(TurnEnvironmentSelections::new(
                 project_root.clone(),
                 Vec::new(),
@@ -4945,6 +4958,7 @@ async fn session_configuration_apply_preserves_absolute_cwd_write_root_on_cwd_up
 
     let updated = session_configuration
         .apply(&SessionSettingsUpdate {
+            model_provider_id: None,
             environments: Some(TurnEnvironmentSelections::new(next_cwd.clone(), Vec::new())),
             ..Default::default()
         })
@@ -4985,6 +4999,7 @@ async fn session_update_settings_does_not_rewrite_sticky_environment_cwds() {
 
     session
         .update_settings(SessionSettingsUpdate {
+            model_provider_id: None,
             environments: Some(TurnEnvironmentSelections::new(
                 updated_cwd.clone(),
                 current_environments,
@@ -5031,6 +5046,7 @@ async fn relative_cwd_update_without_environments_resolves_under_session_cwd() {
 
     session
         .update_settings(SessionSettingsUpdate {
+            model_provider_id: None,
             environments: Some(TurnEnvironmentSelections::new(
                 updated_cwd.clone(),
                 Vec::new(),
@@ -5066,6 +5082,7 @@ async fn environment_settings_preserve_explicit_primary_cwd() {
 
     session
         .update_settings(SessionSettingsUpdate {
+            model_provider_id: None,
             environments: Some(TurnEnvironmentSelections::new(
                 updated_cwd.clone(),
                 environments,
@@ -5096,6 +5113,7 @@ async fn absolute_cwd_update_with_turn_environment_is_allowed() {
         .new_turn_with_sub_id(
             "sub-1".to_string(),
             SessionSettingsUpdate {
+                model_provider_id: None,
                 environments: Some(TurnEnvironmentSelections::new(
                     absolute_cwd.clone(),
                     vec![local(absolute_cwd.clone())],
@@ -6567,6 +6585,7 @@ async fn user_turn_updates_approvals_reviewer() {
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(config.cwd.clone())),
                 approval_policy: Some(config.permissions.approval_policy.value()),
                 approvals_reviewer: Some(codex_config::types::ApprovalsReviewer::AutoReview),
@@ -6606,6 +6625,7 @@ async fn turn_environments_set_primary_environment() {
         .new_turn_with_sub_id(
             "sub-1".to_string(),
             SessionSettingsUpdate {
+                model_provider_id: None,
                 environments: Some(TurnEnvironmentSelections::new(
                     selected_cwd.clone(),
                     vec![local(selected_cwd.clone())],
@@ -6762,6 +6782,7 @@ async fn empty_turn_environments_clear_primary_environment() {
         .new_turn_with_sub_id(
             "sub-1".to_string(),
             SessionSettingsUpdate {
+                model_provider_id: None,
                 environments: Some(TurnEnvironmentSelections::new(
                     session.get_config().await.cwd.clone(),
                     vec![],

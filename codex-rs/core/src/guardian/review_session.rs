@@ -811,6 +811,7 @@ async fn run_review_on_session(
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(codex_protocol::protocol::TurnEnvironmentSelections::new(
                     parent_turn_legacy_fallback_cwd,
                     parent_turn_environments,

@@ -3311,6 +3311,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_including_incoming_us
             core_test_support::submit_thread_settings(
                 &codex,
                 codex_protocol::protocol::ThreadSettingsOverrides {
+                    model_provider_id: None,
                     environments: Some(local_selections(
                         test_path_buf(PRETURN_CONTEXT_DIFF_CWD).abs(),
                     )),
@@ -3424,6 +3425,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_strips_incoming_model
         &codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
             model: Some(next_model.to_string()),
+            model_provider_id: None,
             ..Default::default()
         },
     )

@@ -108,6 +108,7 @@ async fn submit_turn_with_approval_and_environments(
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(turn_environment_selections),
                 approval_policy: Some(approval_policy),
                 approvals_reviewer: Some(ApprovalsReviewer::User),

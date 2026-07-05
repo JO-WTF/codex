@@ -51,6 +51,7 @@ fn read_only_user_turn(test: &TestCodex, items: Vec<UserInput>, model: String) -
         responsesapi_client_metadata: None,
         additional_context: Default::default(),
         thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             environments: Some(local_selections(test.config.cwd.clone())),
             approval_policy: Some(AskForApproval::Never),
             sandbox_policy: Some(sandbox_policy),
@@ -174,6 +175,7 @@ async fn model_change_appends_model_instructions_developer_message() -> Result<(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
             model: Some(next_model.to_string()),
+            model_provider_id: None,
             ..Default::default()
         },
     )
@@ -246,6 +248,7 @@ async fn model_and_personality_change_only_appends_model_instructions() -> Resul
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
             model: Some(next_model.to_string()),
+            model_provider_id: None,
             personality: Some(Personality::Pragmatic),
             ..Default::default()
         },
@@ -1059,6 +1062,7 @@ async fn model_switch_to_smaller_model_updates_token_context_window() -> Result<
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
             model: Some(smaller_model_slug.to_string()),
+            model_provider_id: None,
             ..Default::default()
         },
     )

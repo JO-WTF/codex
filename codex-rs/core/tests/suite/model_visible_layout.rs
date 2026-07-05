@@ -127,6 +127,7 @@ async fn snapshot_model_visible_layout_turn_overrides() -> Result<()> {
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(first_turn_cwd)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(first_sandbox_policy),
@@ -162,6 +163,7 @@ async fn snapshot_model_visible_layout_turn_overrides() -> Result<()> {
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(preturn_context_diff_cwd)),
                 approval_policy: Some(AskForApproval::OnRequest),
                 sandbox_policy: Some(second_sandbox_policy),
@@ -253,6 +255,7 @@ async fn snapshot_model_visible_layout_cwd_change_does_not_refresh_agents() -> R
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(cwd_one.clone())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(first_sandbox_policy),
@@ -286,6 +289,7 @@ async fn snapshot_model_visible_layout_cwd_change_does_not_refresh_agents() -> R
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(cwd_two)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(second_sandbox_policy),
@@ -411,6 +415,7 @@ async fn snapshot_model_visible_layout_resume_with_personality_change() -> Resul
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(resume_override_cwd)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
@@ -511,6 +516,7 @@ async fn snapshot_model_visible_layout_resume_override_matches_rollout_model() -
         codex_protocol::protocol::ThreadSettingsOverrides {
             environments: Some(local_selections(resume_override_cwd)),
             model: Some("gpt-5.2".to_string()),
+            model_provider_id: None,
             ..Default::default()
         },
     )

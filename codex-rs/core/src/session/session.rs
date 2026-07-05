@@ -233,6 +233,35 @@ impl SessionConfiguration {
         if let Some(collaboration_mode) = updates.collaboration_mode.clone() {
             next_configuration.collaboration_mode = collaboration_mode;
         }
+        if let Some(model_provider_id) = updates.model_provider_id.as_ref() {
+            let Some(model_provider) = next_configuration
+                .original_config_do_not_use
+                .model_providers
+                .get(model_provider_id)
+                .cloned()
+            else {
+                return Err(ConstraintError::InvalidValue {
+                    field_name: "model_provider",
+                    candidate: model_provider_id.clone(),
+                    allowed: format!(
+                        "{{{}}}",
+                        next_configuration
+                            .original_config_do_not_use
+                            .model_providers
+                            .keys()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                    requirement_source: codex_config::RequirementSource::Unknown,
+                });
+            };
+            let mut config = (*next_configuration.original_config_do_not_use).clone();
+            config.model_provider_id = model_provider_id.clone();
+            config.model_provider = model_provider.clone();
+            next_configuration.original_config_do_not_use = Arc::new(config);
+            next_configuration.provider = model_provider;
+        }
         if let Some(multi_agent_mode) = updates.multi_agent_mode {
             next_configuration.multi_agent_mode = multi_agent_mode;
         }
@@ -429,6 +458,7 @@ pub(crate) struct SessionSettingsUpdate {
     pub(crate) permission_profile: Option<PermissionProfile>,
     pub(crate) active_permission_profile: Option<ActivePermissionProfile>,
     pub(crate) windows_sandbox_level: Option<WindowsSandboxLevel>,
+    pub(crate) model_provider_id: Option<String>,
     pub(crate) collaboration_mode: Option<CollaborationMode>,
     pub(crate) multi_agent_mode: Option<MultiAgentMode>,
     pub(crate) reasoning_summary: Option<ReasoningSummaryConfig>,

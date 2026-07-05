@@ -827,6 +827,7 @@ impl Codex {
     ) -> ConstraintResult<()> {
         self.session
             .update_settings(SessionSettingsUpdate {
+                model_provider_id: None,
                 app_server_client_name,
                 app_server_client_version,
                 ..Default::default()

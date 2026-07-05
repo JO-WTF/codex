@@ -145,6 +145,7 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
         &codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
             model: Some(model.to_string()),
+            model_provider_id: None,
             ..Default::default()
         },
     )
@@ -163,6 +164,7 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                model_provider_id: None,
                 environments: Some(local_selections(cwd_path)),
                 approval_policy: Some(AskForApproval::OnRequest),
                 sandbox_policy: Some(sandbox_policy),

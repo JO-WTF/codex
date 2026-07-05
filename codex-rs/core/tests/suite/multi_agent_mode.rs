@@ -51,6 +51,7 @@ async fn submit_turn(
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: ThreadSettingsOverrides {
+                model_provider_id: None,
                 multi_agent_mode: mode,
                 ..Default::default()
             },

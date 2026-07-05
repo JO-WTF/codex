@@ -550,6 +550,7 @@ async fn snapshot_rollback_followup_turn_trims_context_updates() -> Result<()> {
     core_test_support::submit_thread_settings(
         &conversation,
         codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider_id: None,
             environments: Some(local_selections(override_cwd.clone())),
             collaboration_mode: Some(CollaborationMode {
                 mode: ModeKind::Default,

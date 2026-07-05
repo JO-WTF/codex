@@ -792,6 +792,7 @@ async fn subagent_stop_replaces_stop_and_skips_internal_subagents() -> Result<()
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
                 model: Some(internal_thread.session_configured.model.clone()),
+                model_provider_id: None,
                 ..Default::default()
             },
         })

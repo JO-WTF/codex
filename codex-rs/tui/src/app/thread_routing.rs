@@ -653,6 +653,7 @@ impl App {
                             permissions_override,
                             config.permissions.user_visible_workspace_roots(),
                             model.to_string(),
+                            config.model_provider_id.clone(),
                             effort.clone(),
                             *summary,
                             service_tier.clone(),

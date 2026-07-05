@@ -2615,6 +2615,9 @@ impl App {
                 };
                 (edits, success_message, post_save_action)
             }
+            crate::app_event::ProviderConfigAction::FetchModelsForNewProvider { .. } => {
+                unreachable!("new provider model fetch is handled before config edits are built")
+            }
             crate::app_event::ProviderConfigAction::Delete { id } => {
                 if builtin_ids.contains_key(&id) {
                     self.chat_widget

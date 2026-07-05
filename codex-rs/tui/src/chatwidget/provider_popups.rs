@@ -12,6 +12,8 @@ use crate::app_event::ProviderFormDraft;
 use crate::app_event::ProviderFormField;
 use crate::app_event::ProviderFormMode;
 use crate::app_event_sender::AppEventSender;
+use crate::bottom_pane::BottomPaneView;
+use crate::bottom_pane::ViewCompletion;
 use crate::chatwidget::provider_sections::ProviderListSection;
 use crate::chatwidget::provider_sections::ProviderSectionCounts;
 use crate::chatwidget::provider_sections::provider_description;

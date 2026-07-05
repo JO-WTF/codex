@@ -134,6 +134,7 @@ pub(crate) enum ProviderSetupField {
     BaseUrl,
     EnvKey,
     WireApi,
+    FetchModels,
     Model,
     ContextWindow,
     Confirm,
@@ -183,6 +184,7 @@ impl ProviderSetupState {
             ProviderSetupField::BaseUrl => self.base_url.clone(),
             ProviderSetupField::EnvKey => self.env_key.clone(),
             ProviderSetupField::WireApi => String::new(),
+            ProviderSetupField::FetchModels => String::new(),
             ProviderSetupField::Model => String::new(),
             ProviderSetupField::ContextWindow => self.context_window.to_string(),
             ProviderSetupField::Confirm => String::new(),
@@ -221,7 +223,7 @@ impl ProviderSetupState {
                 self.env_key = value.to_string();
                 self.start_field(ProviderSetupField::WireApi);
             }
-            ProviderSetupField::WireApi => {}
+            ProviderSetupField::WireApi | ProviderSetupField::FetchModels => {}
             ProviderSetupField::Model => {
                 if self.models.is_empty() {
                     return Err("No models were fetched for this provider".to_string());
@@ -277,6 +279,47 @@ impl ProviderSetupState {
             ModelSelectionDirection::Next => (self.selected_model_index + 1) % self.models.len(),
         };
         self.model = self.models[self.selected_model_index].model_id.clone();
+    }
+
+    fn move_form_selection(&mut self, direction: ModelSelectionDirection) {
+        const ROWS: [ProviderSetupField; 6] = [
+            ProviderSetupField::Id,
+            ProviderSetupField::Name,
+            ProviderSetupField::BaseUrl,
+            ProviderSetupField::EnvKey,
+            ProviderSetupField::WireApi,
+            ProviderSetupField::FetchModels,
+        ];
+        let current = ROWS
+            .iter()
+            .position(|field| *field == self.field)
+            .unwrap_or(0);
+        let next = match direction {
+            ModelSelectionDirection::Previous => current.checked_sub(1).unwrap_or(ROWS.len() - 1),
+            ModelSelectionDirection::Next => (current + 1) % ROWS.len(),
+        };
+        self.start_field(ROWS[next]);
+    }
+
+    fn selected_form_field_mut(&mut self) -> Option<&mut String> {
+        match self.field {
+            ProviderSetupField::Id => Some(&mut self.id),
+            ProviderSetupField::Name => Some(&mut self.name),
+            ProviderSetupField::BaseUrl => Some(&mut self.base_url),
+            ProviderSetupField::EnvKey => Some(&mut self.env_key),
+            ProviderSetupField::WireApi
+            | ProviderSetupField::FetchModels
+            | ProviderSetupField::Model
+            | ProviderSetupField::ContextWindow
+            | ProviderSetupField::Confirm => None,
+        }
+    }
+
+    fn toggle_wire_api(&mut self) {
+        self.wire_api = match self.wire_api {
+            WireApi::Chat => WireApi::Responses,
+            WireApi::Responses => WireApi::Chat,
+        };
     }
 
     fn provider(&self) -> ModelProviderInfo {
@@ -921,7 +964,12 @@ impl AuthModeWidget {
             Constraint::Min(8),
             Constraint::Length(match state.field {
                 ProviderSetupField::Confirm => 0,
-                ProviderSetupField::WireApi => 5,
+                ProviderSetupField::Id
+                | ProviderSetupField::Name
+                | ProviderSetupField::BaseUrl
+                | ProviderSetupField::EnvKey
+                | ProviderSetupField::WireApi
+                | ProviderSetupField::FetchModels => 10,
                 ProviderSetupField::Model => 7,
                 _ => 3,
             }),
@@ -972,12 +1020,17 @@ impl AuthModeWidget {
 
         match state.field {
             ProviderSetupField::Confirm => {}
-            ProviderSetupField::WireApi => {
-                Paragraph::new(provider_setup_wire_api_lines(state.wire_api))
+            ProviderSetupField::Id
+            | ProviderSetupField::Name
+            | ProviderSetupField::BaseUrl
+            | ProviderSetupField::EnvKey
+            | ProviderSetupField::WireApi
+            | ProviderSetupField::FetchModels => {
+                Paragraph::new(provider_setup_form_lines(state))
                     .wrap(Wrap { trim: false })
                     .block(
                         Block::default()
-                            .title(provider_setup_field_title(state.field))
+                            .title("Provider")
                             .borders(Borders::ALL)
                             .border_type(BorderType::Rounded)
                             .border_style(Style::default().fg(Color::Cyan)),
@@ -1016,8 +1069,20 @@ impl AuthModeWidget {
         }
 
         let mut footer_lines: Vec<Line> = Vec::new();
-        if state.field == ProviderSetupField::WireApi {
-            footer_lines.push("  Use ↑/↓ or 1/2 to choose the wire API".dim().into());
+        if matches!(
+            state.field,
+            ProviderSetupField::Id
+                | ProviderSetupField::Name
+                | ProviderSetupField::BaseUrl
+                | ProviderSetupField::EnvKey
+                | ProviderSetupField::WireApi
+                | ProviderSetupField::FetchModels
+        ) {
+            footer_lines.push(
+                "  Use ↑/↓ to choose a field; ←/→ changes wire type"
+                    .dim()
+                    .into(),
+            );
         } else if state.field == ProviderSetupField::Model {
             footer_lines.push("  Use ↑/↓ or 1/2 to choose a model".dim().into());
         }
@@ -1027,7 +1092,7 @@ impl AuthModeWidget {
                 self.confirm_binding().into(),
                 if state.field == ProviderSetupField::Confirm {
                     " to save".dim()
-                } else if state.field == ProviderSetupField::WireApi {
+                } else if state.field == ProviderSetupField::FetchModels {
                     " to fetch models".dim()
                 } else {
                     " to continue".dim()
@@ -1249,19 +1314,32 @@ impl AuthModeWidget {
                 return true;
             }
 
-            if state.field == ProviderSetupField::WireApi {
-                if keys::MOVE_UP.is_pressed(*key_event) || keys::SELECT_FIRST.is_pressed(*key_event)
-                {
-                    state.wire_api = WireApi::Chat;
+            if matches!(
+                state.field,
+                ProviderSetupField::Id
+                    | ProviderSetupField::Name
+                    | ProviderSetupField::BaseUrl
+                    | ProviderSetupField::EnvKey
+                    | ProviderSetupField::WireApi
+                    | ProviderSetupField::FetchModels
+            ) {
+                if keys::MOVE_UP.is_pressed(*key_event) {
+                    state.move_form_selection(ModelSelectionDirection::Previous);
                     self.set_error(/*message*/ None);
                     should_request_frame = true;
-                } else if keys::MOVE_DOWN.is_pressed(*key_event)
-                    || keys::SELECT_SECOND.is_pressed(*key_event)
-                {
-                    state.wire_api = WireApi::Responses;
+                } else if keys::MOVE_DOWN.is_pressed(*key_event) {
+                    state.move_form_selection(ModelSelectionDirection::Next);
                     self.set_error(/*message*/ None);
                     should_request_frame = true;
-                } else if keys::CONFIRM.is_pressed(*key_event) {
+                } else if matches!(key_event.code, KeyCode::Left | KeyCode::Right)
+                    && state.field == ProviderSetupField::WireApi
+                {
+                    state.toggle_wire_api();
+                    self.set_error(/*message*/ None);
+                    should_request_frame = true;
+                } else if keys::CONFIRM.is_pressed(*key_event)
+                    && state.field == ProviderSetupField::FetchModels
+                {
                     let provider = state.provider();
                     if built_in_model_providers(None).contains_key(&state.id) {
                         error_message = Some(format!(
@@ -1281,6 +1359,29 @@ impl AuthModeWidget {
                     self.set_error(/*message*/ None);
                     self.highlighted_mode = SignInOption::CustomProvider;
                     should_request_frame = true;
+                } else {
+                    match key_event.code {
+                        KeyCode::Backspace => {
+                            if let Some(value) = state.selected_form_field_mut() {
+                                value.pop();
+                                self.set_error(/*message*/ None);
+                                should_request_frame = true;
+                            }
+                        }
+                        KeyCode::Char(c)
+                            if key_event.kind == KeyEventKind::Press
+                                && !key_event.modifiers.contains(KeyModifiers::SUPER)
+                                && !key_event.modifiers.contains(KeyModifiers::CONTROL)
+                                && !key_event.modifiers.contains(KeyModifiers::ALT) =>
+                        {
+                            if let Some(value) = state.selected_form_field_mut() {
+                                value.push(c);
+                                self.set_error(/*message*/ None);
+                                should_request_frame = true;
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             } else if state.field == ProviderSetupField::Model {
                 if keys::MOVE_UP.is_pressed(*key_event) || keys::SELECT_FIRST.is_pressed(*key_event)
@@ -1670,6 +1771,91 @@ impl WidgetRef for AuthModeWidget {
     }
 }
 
+fn provider_setup_form_lines(state: &ProviderSetupState) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    lines.push(provider_setup_form_row(
+        state.field == ProviderSetupField::Id,
+        "id",
+        &state.id,
+        "provider-id",
+    ));
+    lines.push(provider_setup_form_row(
+        state.field == ProviderSetupField::Name,
+        "name",
+        &state.name,
+        "My Provider",
+    ));
+    lines.push(provider_setup_form_row(
+        state.field == ProviderSetupField::BaseUrl,
+        "url",
+        &state.base_url,
+        "https://api.example.com/v1",
+    ));
+    lines.push(provider_setup_form_row(
+        state.field == ProviderSetupField::EnvKey,
+        "apikey env",
+        &state.env_key,
+        "ENV_VAR_NAME or -",
+    ));
+
+    let marker = if state.field == ProviderSetupField::WireApi {
+        "  › ".cyan()
+    } else {
+        "    ".into()
+    };
+    let chat = if state.wire_api == WireApi::Chat {
+        " Chat ".cyan().bold()
+    } else {
+        " Chat ".dim()
+    };
+    let responses = if state.wire_api == WireApi::Responses {
+        " Responses ".cyan().bold()
+    } else {
+        " Responses ".dim()
+    };
+    lines.push(Line::from(vec![
+        marker,
+        "wire type  ".dim(),
+        chat,
+        " ".into(),
+        responses,
+    ]));
+
+    let marker = if state.field == ProviderSetupField::FetchModels {
+        "  › ".cyan()
+    } else {
+        "    ".into()
+    };
+    let label = if state.is_saving {
+        "Fetching models..."
+    } else {
+        "Fetch models"
+    };
+    lines.push(Line::from(vec![marker, label.green().bold()]));
+    lines
+}
+
+fn provider_setup_form_row(
+    selected: bool,
+    label: &'static str,
+    value: &str,
+    placeholder: &str,
+) -> Line<'static> {
+    let marker = if selected {
+        "  › ".cyan()
+    } else {
+        "    ".into()
+    };
+    let value = if value.is_empty() {
+        placeholder.to_string().dim()
+    } else if selected {
+        value.to_string().cyan()
+    } else {
+        value.to_string().into()
+    };
+    Line::from(vec![marker, format!("{label:<11}").dim(), value])
+}
+
 fn provider_setup_wire_api_lines(selected: WireApi) -> Vec<Line<'static>> {
     [
         (
@@ -1737,6 +1923,7 @@ fn provider_setup_field_title(field: ProviderSetupField) -> &'static str {
         ProviderSetupField::BaseUrl => "Base URL",
         ProviderSetupField::EnvKey => "API key env var",
         ProviderSetupField::WireApi => "Wire API",
+        ProviderSetupField::FetchModels => "Fetch models",
         ProviderSetupField::Model => "Select model",
         ProviderSetupField::ContextWindow => "Context window",
         ProviderSetupField::Confirm => "Confirm",
@@ -1750,6 +1937,7 @@ fn provider_setup_placeholder(field: ProviderSetupField) -> &'static str {
         ProviderSetupField::BaseUrl => "https://api.deepseek.com/v1",
         ProviderSetupField::EnvKey => "DEEPSEEK_API_KEY or - for no env var",
         ProviderSetupField::WireApi => "chat or responses",
+        ProviderSetupField::FetchModels => "",
         ProviderSetupField::Model => "",
         ProviderSetupField::ContextWindow => "262144",
         ProviderSetupField::Confirm => "",

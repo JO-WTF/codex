@@ -362,7 +362,7 @@ impl CodexThread {
         overrides: CodexThreadSettingsOverrides,
     ) -> SessionSettingsUpdate {
         let CodexThreadSettingsOverrides {
-            model_provider_id: None,
+            model_provider_id,
             environments,
             workspace_roots,
             profile_workspace_roots,
@@ -373,7 +373,6 @@ impl CodexThread {
             active_permission_profile,
             windows_sandbox_level,
             model,
-            model_provider_id,
             effort,
             summary,
             service_tier,

@@ -110,7 +110,7 @@ async fn thread_settings_update(
     thread_settings: ThreadSettingsOverrides,
 ) -> SessionSettingsUpdate {
     let ThreadSettingsOverrides {
-        model_provider_id: None,
+        model_provider_id,
         environments,
         workspace_roots,
         profile_workspace_roots,
@@ -121,7 +121,6 @@ async fn thread_settings_update(
         active_permission_profile,
         windows_sandbox_level,
         model,
-        model_provider_id,
         effort,
         summary,
         service_tier,

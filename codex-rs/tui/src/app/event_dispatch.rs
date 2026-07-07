@@ -2709,11 +2709,7 @@ impl App {
                 if !success_message.is_empty() {
                     self.chat_widget.add_info_message(success_message, None);
                 }
-                let open_model_popup = matches!(
-                    post_save_action,
-                    ProviderPostSaveAction::FetchAndOpenModels { .. }
-                );
-                let refresh_succeeded = match post_save_action {
+                let ref_succeeded = match &post_save_action {
                     ProviderPostSaveAction::None => false,
                     ProviderPostSaveAction::RefreshCurrentProvider => {
                         self.refresh_model_catalog_from_app_server(
@@ -2731,10 +2727,18 @@ impl App {
                         .await
                     }
                 };
-                if open_model_popup && refresh_succeeded {
-                    self.chat_widget.open_model_popup();
-                } else {
-                    self.chat_widget.open_provider_manager();
+                match (post_save_action, ref_succeeded) {
+                    (ProviderPostSaveAction::FetchAndOpenModels { .. }, true) => {
+                        self.chat_widget.open_model_popup();
+                    }
+                    (ProviderPostSaveAction::RefreshCurrentProvider, true) => {
+                        // Context window updated and models refreshed — no navigation needed.
+                    }
+                    (ProviderPostSaveAction::None, _)
+                    | (ProviderPostSaveAction::RefreshCurrentProvider, false)
+                    | (ProviderPostSaveAction::FetchAndOpenModels { .. }, false) => {
+                        self.chat_widget.open_provider_manager();
+                    }
                 }
             }
             Err(err) => {
